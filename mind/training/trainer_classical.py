@@ -22,7 +22,6 @@ from mind.utils.experiment_tracking import log_metrics
 
 logger = logging.getLogger(__name__)
 
-
 def train_random_forest(
         X_train: np.ndarray,
         y_train: np.ndarray,
@@ -33,29 +32,7 @@ def train_random_forest(
         class_weights: Optional[Dict[int, float]] = None
 ) -> Tuple[Any, Dict[str, Any]]:
     """
-    Train a Random Forest model.
-
-    Parameters
-    ----------
-    X_train : np.ndarray
-        Training features
-    y_train : np.ndarray
-        Training labels
-    X_val : np.ndarray
-        Validation features
-    y_val : np.ndarray
-        Validation labels
-    config : Dict[str, Any]
-        Configuration dictionary
-    optimize : bool, optional
-        Whether to optimize hyperparameters, by default True
-    class_weights : Optional[Dict[int, float]], optional
-        Class weights, by default None
-
-    Returns
-    -------
-    Tuple[Any, Dict[str, Any]]
-        Trained model and metrics
+    Train a Random Forest model efficiently.
     """
     logger.info("Training Random Forest")
 
@@ -111,29 +88,7 @@ def train_svm(
         class_weights: Optional[Dict[int, float]] = None
 ) -> Tuple[Any, Dict[str, Any], Optional[Any]]:
     """
-    Train a Support Vector Machine model.
-
-    Parameters
-    ----------
-    X_train : np.ndarray
-        Training features
-    y_train : np.ndarray
-        Training labels
-    X_val : np.ndarray
-        Validation features
-    y_val : np.ndarray
-        Validation labels
-    config : Dict[str, Any]
-        Configuration dictionary
-    optimize : bool, optional
-        Whether to optimize hyperparameters, by default True
-    class_weights : Optional[Dict[int, float]], optional
-        Class weights, by default None
-
-    Returns
-    -------
-    Tuple[Any, Dict[str, Any], Optional[Any]]
-        Trained model, metrics, and PCA transformer if used
+    Train a Support Vector Machine model efficiently.
     """
     logger.info("Training SVM")
 
@@ -158,11 +113,15 @@ def train_svm(
         if use_pca:
             from sklearn.decomposition import PCA
 
-            # Determine number of components
+            # Determine number of components - efficiently
             pca_components = svm_params.get('pca_components', 0.95)
+            if isinstance(pca_components, float) and pca_components <= 1.0:
+                n_components = pca_components
+            else:
+                n_components = min(100, int(pca_components))
 
             # Create and fit PCA transformer
-            pca_transformer = PCA(n_components=pca_components, random_state=config['experiment'].get('seed', 42))
+            pca_transformer = PCA(n_components=n_components, random_state=config['experiment'].get('seed', 42))
             X_train_pca = pca_transformer.fit_transform(X_train)
 
             # Train model on transformed data
@@ -211,27 +170,7 @@ def train_mlp(
         optimize: bool = True
 ) -> Tuple[Any, Dict[str, Any]]:
     """
-    Train a Multilayer Perceptron model.
-
-    Parameters
-    ----------
-    X_train : np.ndarray
-        Training features
-    y_train : np.ndarray
-        Training labels
-    X_val : np.ndarray
-        Validation features
-    y_val : np.ndarray
-        Validation labels
-    config : Dict[str, Any]
-        Configuration dictionary
-    optimize : bool, optional
-        Whether to optimize hyperparameters, by default True
-
-    Returns
-    -------
-    Tuple[Any, Dict[str, Any]]
-        Trained model and metrics
+    Train a Multilayer Perceptron model efficiently.
     """
     logger.info("Training MLP")
 
@@ -271,7 +210,6 @@ def train_mlp(
     }
 
     return model, metrics
-
 
 def train_all_classical_models(
         data: Dict[str, Any],
