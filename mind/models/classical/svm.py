@@ -4,7 +4,6 @@ from sklearn.model_selection import RandomizedSearchCV
 from sklearn.decomposition import PCA
 from typing import Dict, Any, Tuple, List, Optional
 import logging
-from scipy.stats import uniform
 
 logger = logging.getLogger(__name__)
 
@@ -12,16 +11,6 @@ logger = logging.getLogger(__name__)
 def create_svm(config: Dict[str, Any]) -> SVC:
     """
     Create a Support Vector Machine classifier with the specified configuration.
-
-    Parameters
-    ----------
-    config : Dict[str, Any]
-        Configuration dictionary
-
-    Returns
-    -------
-    SVC
-        Initialized SVM classifier
     """
     svm_params = config['models']['classical']['svm']
 
@@ -44,23 +33,7 @@ def optimize_svm(
         class_weights: Optional[Dict[int, float]] = None
 ) -> Tuple[SVC, Dict[str, Any], Optional[PCA]]:
     """
-    Optimize SVM hyperparameters using randomized search, with optional PCA.
-
-    Parameters
-    ----------
-    X_train : np.ndarray
-        Training features
-    y_train : np.ndarray
-        Training labels
-    config : Dict[str, Any]
-        Configuration dictionary
-    class_weights : Optional[Dict[int, float]], optional
-        Class weights, by default None
-
-    Returns
-    -------
-    Tuple[SVC, Dict[str, Any], Optional[PCA]]
-        Optimized SVM classifier, best parameters, and PCA transformer if used
+    Optimize SVM hyperparameters using randomized search, with efficient PCA.
     """
     logger.info("Optimizing SVM hyperparameters")
 
@@ -72,16 +45,15 @@ def optimize_svm(
     # Apply PCA if requested
     if use_pca:
         n_features = X_train.shape[1]
-        n_samples = X_train.shape[0]
 
-        # Determine optimal number of components
+        # Determine optimal number of components efficiently
         pca_components = svm_params.get('pca_components', 0.95)
         if isinstance(pca_components, float) and pca_components <= 1.0:
             # Use explained variance ratio
             n_components = pca_components
         else:
-            # Use specific number of components or cap at 500
-            n_components = min(n_features, n_samples, int(pca_components), 500)
+            # Use specific number of components (capped at 100 for efficiency)
+            n_components = min(n_features, int(pca_components), 100)
 
         logger.info(f"Applying PCA to reduce dimensions from {n_features} to {n_components}")
         pca_transformer = PCA(n_components=n_components, random_state=config['experiment'].get('seed', 42))
@@ -96,32 +68,33 @@ def optimize_svm(
     else:
         X_train_opt = X_train
 
-    # Define parameter distribution for randomized search
+    # Define efficient parameter distribution for randomized search
     param_dist = {
-        'C': uniform(0.1, 20),  # Broader range of regularization values
-        'gamma': ['scale', 'auto', 0.001, 0.01, 0.1, 1],
-        'kernel': ['rbf', 'linear', 'poly'],
-        'degree': [2, 3],  # For poly kernel
-        'class_weight': ['balanced', None],
-        'probability': [True]  # Needed for ROC curves
+        'C': [0.1, 1.0, 10.0],
+        'gamma': ['scale', 'auto', 0.01, 0.1],
+        'kernel': ['rbf', 'linear'],
+        'probability': [True]
     }
 
-    # If class_weights provided, include them in the search
+    # If class_weights provided, include them
     if class_weights:
-        param_dist['class_weight'] = ['balanced', None, class_weights]
+        param_dist['class_weight'] = ['balanced', class_weights]
+    else:
+        param_dist['class_weight'] = ['balanced']
 
     # Initialize SVM
     svm = SVC(random_state=config['experiment'].get('seed', 42))
 
-    # Randomized search with cross-validation
+    # Randomized search with cross-validation using efficient parameters
     random_search = RandomizedSearchCV(
         estimator=svm,
         param_distributions=param_dist,
-        n_iter=20,  # Number of parameter settings sampled
+        n_iter=10,  # Reduced number of parameter settings
         cv=3,
         n_jobs=-1,
         scoring='f1_weighted',
-        random_state=config['experiment'].get('seed', 42)
+        random_state=config['experiment'].get('seed', 42),
+        verbose=0
     )
 
     # Fit model
@@ -130,7 +103,7 @@ def optimize_svm(
 
     # Get best parameters
     best_params = random_search.best_params_
-    logger.info(f"Best parameters from randomized search: {best_params}")
+    logger.info(f"Best parameters: {best_params}")
 
     return random_search.best_estimator_, best_params, pca_transformer
 

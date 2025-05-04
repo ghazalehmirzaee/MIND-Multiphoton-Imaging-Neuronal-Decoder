@@ -3,7 +3,6 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.model_selection import RandomizedSearchCV
 from typing import Dict, Any, Tuple, List, Optional
 import logging
-from scipy.stats import uniform
 
 logger = logging.getLogger(__name__)
 
@@ -11,16 +10,6 @@ logger = logging.getLogger(__name__)
 def create_mlp(config: Dict[str, Any]) -> MLPClassifier:
     """
     Create a Multilayer Perceptron classifier with the specified configuration.
-
-    Parameters
-    ----------
-    config : Dict[str, Any]
-        Configuration dictionary
-
-    Returns
-    -------
-    MLPClassifier
-        Initialized MLP classifier
     """
     mlp_params = config['models']['classical']['mlp']
 
@@ -32,7 +21,7 @@ def create_mlp(config: Dict[str, Any]) -> MLPClassifier:
         learning_rate=mlp_params.get('learning_rate', 'adaptive'),
         early_stopping=mlp_params.get('early_stopping', True),
         random_state=config['experiment'].get('seed', 42),
-        max_iter=1000
+        max_iter=500  # Reduced from 1000 for efficiency
     )
 
     return model
@@ -44,41 +33,24 @@ def optimize_mlp(
         config: Dict[str, Any]
 ) -> Tuple[MLPClassifier, Dict[str, Any]]:
     """
-    Optimize MLP hyperparameters using randomized search.
-
-    Parameters
-    ----------
-    X_train : np.ndarray
-        Training features
-    y_train : np.ndarray
-        Training labels
-    config : Dict[str, Any]
-        Configuration dictionary
-
-    Returns
-    -------
-    Tuple[MLPClassifier, Dict[str, Any]]
-        Optimized MLP classifier and best parameters
+    Optimize MLP hyperparameters using efficient randomized search.
     """
     logger.info("Optimizing MLP hyperparameters")
 
-    # Define parameter distribution for randomized search
+    # Define efficient parameter distribution for randomized search
     param_dist = {
-        'hidden_layer_sizes': [(64,), (128,), (256,), (64, 32), (128, 64), (256, 128), (128, 64, 32)],
-        'activation': ['relu', 'tanh'],
-        'alpha': uniform(0.0001, 0.01),
-        'learning_rate': ['constant', 'adaptive', 'invscaling'],
-        'learning_rate_init': uniform(0.0005, 0.005),
-        'max_iter': [500, 1000],
+        'hidden_layer_sizes': [(64,), (128,), (64, 32), (128, 64)],
+        'activation': ['relu'],
+        'alpha': [0.0001, 0.001, 0.01],
+        'learning_rate': ['adaptive'],
         'early_stopping': [True],
-        'n_iter_no_change': [10, 20],
-        'solver': ['adam', 'sgd']
+        'solver': ['adam']
     }
 
     # Initialize MLP with early stopping
     mlp = MLPClassifier(
         random_state=config['experiment'].get('seed', 42),
-        max_iter=1000,
+        max_iter=500,  # Reduced for efficiency
         early_stopping=True,
         validation_fraction=0.1
     )
@@ -87,11 +59,12 @@ def optimize_mlp(
     random_search = RandomizedSearchCV(
         estimator=mlp,
         param_distributions=param_dist,
-        n_iter=20,  # Number of parameter settings sampled
+        n_iter=10,  # Reduced number of parameter settings
         cv=3,
         n_jobs=-1,
         scoring='f1_weighted',
-        random_state=config['experiment'].get('seed', 42)
+        random_state=config['experiment'].get('seed', 42),
+        verbose=0
     )
 
     # Fit model
@@ -100,7 +73,7 @@ def optimize_mlp(
 
     # Get best parameters
     best_params = random_search.best_params_
-    logger.info(f"Best parameters from randomized search: {best_params}")
+    logger.info(f"Best parameters: {best_params}")
 
     return random_search.best_estimator_, best_params
 
@@ -111,22 +84,7 @@ def extract_feature_importance(
         n_neurons: int
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Extract feature importance from a trained MLP model.
-
-    Parameters
-    ----------
-    model : MLPClassifier
-        Trained MLP model
-    window_size : int
-        Window size used for data processing
-    n_neurons : int
-        Number of neurons
-
-    Returns
-    -------
-    Tuple[np.ndarray, np.ndarray, np.ndarray]
-        2D feature importance (window_size, n_neurons),
-        temporal importance, and neuron importance
+    Extract feature importance from a trained MLP model efficiently.
     """
     # Extract coefficients from the first layer as a proxy for feature importance
     if hasattr(model, 'coefs_') and len(model.coefs_) > 0:
