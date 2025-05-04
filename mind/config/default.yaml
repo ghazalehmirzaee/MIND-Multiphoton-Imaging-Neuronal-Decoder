@@ -5,8 +5,8 @@ experiment:
   output_dir: results
 
 data:
-  matlab_file: data/raw/SFL13_3_80321_009_new.mat
-  behavior_file: data/raw/SFL13_3_80321_009_new.xlsx
+  matlab_file: /home/ghazal/Documents/NS_Projects/NS_P2_050325/MIND-Multiphoton-Imaging-Neural-Decoder/data/raw/SFL13_5_8112021_002_new.mat
+  behavior_file: /home/ghazal/Documents/NS_Projects/NS_P2_050325/MIND-Multiphoton-Imaging-Neural-Decoder/data/raw/SFL13_5_8112021_002_new.xlsx
   window_size: 15
   step_size: 1
   test_size: 0.2
@@ -81,5 +81,5 @@ visualization:
 
 wandb:
   project: MIND
-  entity: your_username
+  entity: mirzaeeghazal
   log_artifacts: true
