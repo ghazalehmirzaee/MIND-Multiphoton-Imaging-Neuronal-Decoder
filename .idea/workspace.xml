@@ -4,7 +4,11 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="095174f0-41c4-428c-aa18-4871bcb2dbb3" name="Changes" comment="" />
+    <list default="true" id="095174f0-41c4-428c-aa18-4871bcb2dbb3" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/mind/evaluation/feature_importance.py" beforeDir="false" afterPath="$PROJECT_DIR$/mind/evaluation/feature_importance.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/mind/evaluation/metrics.py" beforeDir="false" afterPath="$PROJECT_DIR$/mind/evaluation/metrics.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -13,17 +17,17 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "git@github.com:ghazalehmirzaee/MIND-Multiphoton-Imaging-Neural-Decoder.git",
-    "accountId": "c2adcf32-215c-4846-b1cc-c726b95683c2"
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;git@github.com:ghazalehmirzaee/MIND-Multiphoton-Imaging-Neural-Decoder.git&quot;,
+    &quot;accountId&quot;: &quot;c2adcf32-215c-4846-b1cc-c726b95683c2&quot;
   }
-}]]></component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "git-widget-placeholder": "dev"
+}</component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;git-widget-placeholder&quot;: &quot;dev&quot;
   }
-}]]></component>
+}</component>
   <component name="TaskManager">
     <servers />
   </component>
