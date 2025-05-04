@@ -167,24 +167,45 @@ def align_neural_behavioral_data(
 
     return neural_data
 
-
-def load_processed_data(file_path: str) -> Dict[str, Any]:
+def load_processed_data(file_path: str = None) -> Dict[str, Any]:
     """
     Load preprocessed data from NPZ file.
 
     Parameters
     ----------
-    file_path : str
-        Path to the NPZ file
+    file_path : str, optional
+        Path to the NPZ file. If None, will look in default location.
 
     Returns
     -------
     Dict[str, Any]
         Dictionary containing preprocessed data
     """
-    logger.info(f"Loading processed data from {file_path}")
+    logger.info(f"Loading processed data")
+
+    # If file_path is not provided, look in the default location
+    if file_path is None:
+        # Get the project root directory
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+        # Look in the default processed data directory
+        processed_dir = os.path.join(project_root, 'data', 'processed')
+
+        # Find all NPZ files in the directory
+        processed_files = [f for f in os.listdir(processed_dir) if f.endswith('.npz')]
+
+        if not processed_files:
+            logger.error(f"No processed data files found in {processed_dir}")
+            raise FileNotFoundError(f"No processed data files found in {processed_dir}")
+
+        # Use the first file or ask the user to specify if multiple files exist
+        if len(processed_files) > 1:
+            logger.warning(f"Multiple processed data files found: {processed_files}")
+            logger.warning(f"Using the first file: {processed_files[0]}")
+
+        file_path = os.path.join(processed_dir, processed_files[0])
 
     try:
+        logger.info(f"Loading processed data from {file_path}")
         data = np.load(file_path, allow_pickle=True)
         data_dict = {key: data[key] for key in data.files}
 
@@ -202,7 +223,7 @@ def load_processed_data(file_path: str) -> Dict[str, Any]:
         raise
 
 
-def save_processed_data(data_dict: Dict[str, Any], file_path: str) -> None:
+def save_processed_data(data_dict: Dict[str, Any], file_path: str = None) -> None:
     """
     Save preprocessed data to NPZ file.
 
@@ -210,9 +231,27 @@ def save_processed_data(data_dict: Dict[str, Any], file_path: str) -> None:
     ----------
     data_dict : Dict[str, Any]
         Dictionary containing data to save
-    file_path : str
-        Path to save the NPZ file
+    file_path : str, optional
+        Path to save the NPZ file. If None, will save in default location.
     """
+    # If file_path is not provided, save to the default location
+    if file_path is None:
+        # Get the project root directory
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+        # Default processed data directory
+        processed_dir = os.path.join(project_root, 'data', 'processed')
+
+        # Create default filename from the first MATLAB file if available
+        if 'matlab_file' in data_dict:
+            matlab_file = data_dict['matlab_file']
+            filename = f"{os.path.basename(matlab_file).split('.')[0]}_processed.npz"
+        else:
+            # Use a timestamp if no MATLAB file is available
+            import time
+            filename = f"processed_data_{int(time.time())}.npz"
+
+        file_path = os.path.join(processed_dir, filename)
+
     logger.info(f"Saving processed data to {file_path}")
 
     # Create directory if it doesn't exist

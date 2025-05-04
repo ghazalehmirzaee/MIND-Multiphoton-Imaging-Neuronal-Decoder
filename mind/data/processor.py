@@ -403,23 +403,19 @@ def main(config: Dict[str, Any]) -> Dict[str, Any]:
     # Combine processed and split data
     final_data = {**processed_data, **split_data_dict}
 
-    # Save processed data
-    # output_path = os.path.join(
-    #     'data', 'processed',
-    #     f"{os.path.basename(matlab_file).split('.')[0]}_processed.npz"
-    # )
-    # Save processed data local
-    # output_path = os.path.join(
-    #     "/home/ghazal/Documents/NS_Projects/NS_P2_050325/MIND-Multiphoton-Imaging-Neural-Decoder/data/processed",
-    #     f"{os.path.basename(matlab_file).split('.')[0]}_processed.npz"
-    # )
-    # Save processed data local gpu
-    output_path = os.path.join(
-        "/NewRaidData/ghazal/NS_P2_050325/MIND-Multiphoton-Imaging-Neural-Decoder/data/processed",
-        f"{os.path.basename(matlab_file).split('.')[0]}_processed.npz"
-    )
+    # Add the matlab file path to the data dictionary
+    final_data['matlab_file'] = matlab_file
 
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    # Get the project root directory
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+
+    # Save processed data to default location
+    processed_dir = os.path.join(project_root, 'data', 'processed')
+    os.makedirs(processed_dir, exist_ok=True)
+
+    filename = f"{os.path.basename(matlab_file).split('.')[0]}_processed.npz"
+    output_path = os.path.join(processed_dir, filename)
+
     save_processed_data(final_data, output_path)
 
     logger.info(f"Data processing completed. Results saved to {output_path}")
