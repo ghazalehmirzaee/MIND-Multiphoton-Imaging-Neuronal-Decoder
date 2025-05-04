@@ -185,7 +185,8 @@ def main():
     )
 
     # Set plotting style
-    plt.style.use(config['visualization']['style'])
+    # plt.style.use(config['visualization']['style'])
+    plt.style.use('ggplot')
 
     # Load data
     logger.info(f"Loading data from {args.data_file}")
