@@ -1,0 +1,85 @@
+# Default configuration for MIND
+experiment:
+  name: default_experiment
+  seed: 42
+  output_dir: results
+
+data:
+  matlab_file: data/raw/SFL13_3_80321_009_new.mat
+  behavior_file: data/raw/SFL13_3_80321_009_new.xlsx
+  window_size: 15
+  step_size: 1
+  test_size: 0.2
+  val_size: 0.15
+
+processing:
+  normalize: true
+  scaler: robust  # options: standard, robust, minmax
+  smooth: true
+  smooth_window: 5
+  smooth_order: 2
+
+training:
+  batch_size: 32
+  epochs: 100
+  learning_rate: 0.001
+  weight_decay: 1e-5
+  early_stopping:
+    patience: 15
+    min_delta: 0.001
+
+models:
+  classical:
+    random_forest:
+      n_estimators: 200
+      max_depth: 30
+      min_samples_split: 5
+      min_samples_leaf: 2
+      class_weight: balanced
+    svm:
+      kernel: rbf
+      C: 1.0
+      gamma: scale
+      class_weight: balanced
+      probability: true
+      pca: true
+      pca_components: 0.95
+    mlp:
+      hidden_layer_sizes: [128, 64]
+      activation: relu
+      solver: adam
+      alpha: 0.0001
+      learning_rate: adaptive
+      early_stopping: true
+
+  deep:
+    fcnn:
+      hidden_sizes: [256, 128, 64]
+      dropout_rates: [0.4, 0.4, 0.3]
+      batch_norm: true
+    cnn:
+      channels: [64, 128, 256]
+      kernel_size: 3
+      dropout_rate: 0.5
+      batch_norm: true
+    lstm:
+      hidden_size1: 128
+      hidden_size2: 256
+      dropout_rate: 0.4
+      batch_norm: true
+      bidirectional: true
+
+visualization:
+  style: seaborn-whitegrid
+  figsize: [12, 8]
+  dpi: 300
+  save_format: png
+  colors:
+    calcium: "#1f77b4"
+    deltaf: "#ff7f0e"
+    deconv: "#2ca02c"
+
+wandb:
+  project: MIND
+  entity: your_username
+  log_artifacts: true
