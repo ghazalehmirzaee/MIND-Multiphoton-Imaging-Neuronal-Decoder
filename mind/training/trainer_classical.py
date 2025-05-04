@@ -519,28 +519,25 @@ def save_results(
     # Create output directory
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
-    # Convert numpy arrays to lists
-    results_json = {}
-
-    for key, value in results.items():
-        if isinstance(value, dict):
-            results_json[key] = {}
-            for k, v in value.items():
-                if isinstance(v, np.ndarray):
-                    results_json[key][k] = v.tolist()
-                elif isinstance(v, dict):
-                    results_json[key][k] = {}
-                    for kk, vv in v.items():
-                        if isinstance(vv, np.ndarray):
-                            results_json[key][k][kk] = vv.tolist()
-                        else:
-                            results_json[key][k][kk] = vv
-                else:
-                    results_json[key][k] = v
-        elif isinstance(value, np.ndarray):
-            results_json[key] = value.tolist()
+    # Define a function to convert NumPy types to Python native types
+    def convert_numpy_to_python(obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif isinstance(obj, (np.int_, np.intc, np.intp, np.int8, np.int16, np.int32, np.int64)):
+            return int(obj)
+        elif isinstance(obj, (np.float_, np.float16, np.float32, np.float64)):
+            return float(obj)
+        elif isinstance(obj, np.bool_):
+            return bool(obj)
+        elif isinstance(obj, dict):
+            return {k: convert_numpy_to_python(v) for k, v in obj.items()}
+        elif isinstance(obj, (list, tuple)):
+            return [convert_numpy_to_python(i) for i in obj]
         else:
-            results_json[key] = value
+            return obj
+
+    # Convert numpy arrays and types to Python native types
+    results_json = convert_numpy_to_python(results)
 
     # Remove models from results
     if 'models' in results_json:
@@ -552,4 +549,4 @@ def save_results(
         json.dump(results_json, f, indent=4)
 
     logger.info(f"Results saved to {output_file}")
-
+    
