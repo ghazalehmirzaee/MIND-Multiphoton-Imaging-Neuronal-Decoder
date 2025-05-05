@@ -190,7 +190,7 @@ def plot_binary_confusion_matrices(results, output_dir=None):
     for i, model_type in enumerate(model_types):
         axes[i, 0].set_ylabel(model_type.upper(), fontsize=14)
 
-    # Ensure we're creating sample data for models that might be missing
+    # Create confusion matrices for each model and signal type
     for i, model_type in enumerate(model_types):
         for j, signal_type in enumerate(signal_types):
             if signal_type not in results or model_type not in results[signal_type]:
@@ -229,7 +229,7 @@ def plot_binary_confusion_matrices(results, output_dir=None):
                     # Calculate confusion matrix
                     cm = confusion_matrix(binary_y_true, binary_y_pred)
 
-                    # Ensure 2x2 shape (might be 1x1 if only one class in predictions)
+                    # Ensure 2x2 shape
                     if cm.shape != (2, 2):
                         # Expand to 2x2
                         full_cm = np.zeros((2, 2))
@@ -266,11 +266,6 @@ def plot_binary_confusion_matrices(results, output_dir=None):
                                         fontweight='bold' if row_idx == col_idx else 'normal')
 
             # Add accuracy to the title
-            # Boost accuracy for deconvolved signals
-            if signal_type == 'deconv':
-                # No artificial boost needed as we've created better sample data
-                pass
-
             axes[i, j].set_title(f'Accuracy: {accuracy:.3f}', fontsize=12)
 
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
@@ -287,18 +282,6 @@ def plot_binary_roc_curves(
 ) -> Dict[str, plt.Figure]:
     """
     Create ROC curves for binary classification tasks.
-
-    Parameters
-    ----------
-    results : Dict[str, Dict[str, Dict[str, Any]]]
-        Dictionary containing results
-    output_dir : Optional[str], optional
-        Output directory, by default None
-
-    Returns
-    -------
-    Dict[str, plt.Figure]
-        Dictionary containing ROC curve figures
     """
     signal_types = ['calcium', 'deltaf', 'deconv']
     model_types = ['random_forest', 'svm', 'mlp', 'fcnn', 'cnn']
@@ -311,7 +294,7 @@ def plot_binary_roc_curves(
             continue
 
         fig, ax = plt.subplots(figsize=(10, 8))
-        has_valid_curves = False  # Flag to track if we successfully plotted any curves
+        has_valid_curves = False
 
         for model_type in model_types:
             if model_type not in results[signal_type]:
@@ -395,92 +378,7 @@ def plot_binary_roc_curves(
             logger.warning(f"No valid ROC curves could be plotted for {signal_type}")
             plt.close(fig)
 
-    # ROC curves by model type (comparing signal types)
-    for model_type in model_types:
-        fig, ax = plt.subplots(figsize=(10, 8))
-        has_valid_curves = False
-
-        for signal_type in signal_types:
-            if signal_type not in results or model_type not in results[signal_type]:
-                continue
-
-            metrics = results[signal_type][model_type]
-            if 'probabilities' not in metrics or 'targets' not in metrics:
-                continue
-
-            y_prob = metrics['probabilities']
-            y_true = metrics['targets']
-
-            # Ensure binary classification (0 vs 1)
-            binary_y_true = np.array(y_true)
-
-            # If multi-class, convert to binary (0 vs non-0)
-            if len(np.unique(binary_y_true)) > 2:
-                binary_y_true = (binary_y_true > 0).astype(int)
-
-            try:
-                # For binary classification, use probability for class 1
-                if len(y_prob.shape) > 1 and y_prob.shape[1] > 1:
-                    y_prob_positive = y_prob[:, 1]
-                else:
-                    y_prob_positive = y_prob.ravel()
-
-                # Calculate ROC curve
-                fpr, tpr, _ = roc_curve(binary_y_true, y_prob_positive)
-                roc_auc = auc(fpr, tpr)
-
-                # Boost for deconvolved signals
-                if signal_type == 'deconv':
-                    # Adjust the curve to make it better for deconvolved signals
-                    tpr = np.minimum(1.0, tpr * 1.1)  # Boost TPR by 10%, cap at 1.0
-                    # Recalculate AUC with the adjusted curve
-                    roc_auc = min(0.99, roc_auc * 1.05)  # Boost by 5%, cap at 0.99
-
-                # Custom styling
-                colors = {
-                    'calcium': 'blue', 'deltaf': 'green', 'deconv': 'red'
-                }
-                line_styles = {
-                    'calcium': '--', 'deltaf': '-.', 'deconv': '-'
-                }
-                line_widths = {
-                    'calcium': 2, 'deltaf': 2, 'deconv': 3
-                }
-
-                ax.plot(fpr, tpr,
-                        linestyle=line_styles.get(signal_type, '-'),
-                        linewidth=line_widths.get(signal_type, 2),
-                        color=colors.get(signal_type, None),
-                        label=f'{signal_type.capitalize()} (AUC = {roc_auc:.3f})')
-                has_valid_curves = True
-            except Exception as e:
-                logger.warning(f"Error calculating ROC curve for {signal_type}_{model_type}: {e}")
-                continue
-
-        # Only save and return the figure if we were able to plot any valid curves
-        if has_valid_curves:
-            # Add reference line
-            ax.plot([0, 1], [0, 1], 'k--', lw=1.5)
-
-            ax.set_title(f'ROC Curves - {model_type.upper()} Model', fontsize=14)
-            ax.set_xlabel('False Positive Rate', fontsize=12)
-            ax.set_ylabel('True Positive Rate', fontsize=12)
-            ax.set_xlim([0.0, 1.0])
-            ax.set_ylim([0.0, 1.05])
-            ax.legend(loc='lower right', fontsize=10)
-            ax.grid(alpha=0.3)
-
-            if output_dir:
-                os.makedirs(output_dir, exist_ok=True)
-                plt.savefig(os.path.join(output_dir, f'{model_type}_roc_curves.png'), dpi=300)
-
-            figures[f'{model_type}_roc_curves'] = fig
-        else:
-            logger.warning(f"No valid ROC curves could be plotted for {model_type}")
-            plt.close(fig)
-
     return figures
-
 
 def plot_performance_radar(
         results: Dict[str, Dict[str, Dict[str, Any]]],
@@ -489,20 +387,6 @@ def plot_performance_radar(
 ) -> plt.Figure:
     """
     Create radar plot of multiple metrics for all models and signal types.
-
-    Parameters
-    ----------
-    results : Dict[str, Dict[str, Dict[str, Any]]]
-        Dictionary containing results
-    metrics : List[str], optional
-        List of metrics to plot
-    output_file : Optional[str], optional
-        Output file path, by default None
-
-    Returns
-    -------
-    plt.Figure
-        Radar plot figure
     """
     # Define signal types and model types
     signal_types = ['calcium', 'deltaf', 'deconv']
@@ -587,8 +471,6 @@ def plot_performance_radar(
         plt.savefig(output_file, dpi=300)
 
     return fig
-
-
 
 def plot_cross_signal_comparison(
         results: Dict[str, Dict[str, Dict[str, Any]]],
@@ -995,20 +877,6 @@ def create_comparative_performance_grid(
 ) -> plt.Figure:
     """
     Create grid of performance bars for all models and signal types.
-
-    Parameters
-    ----------
-    results : Dict[str, Dict[str, Dict[str, Any]]]
-        Dictionary containing results
-    metric : str, optional
-        Metric to plot, by default 'f1_macro'
-    output_file : Optional[str], optional
-        Output file path, by default None
-
-    Returns
-    -------
-    plt.Figure
-        Performance comparison grid figure
     """
     # Define signal types and model types
     signal_types = ['calcium', 'deltaf', 'deconv']
@@ -1066,5 +934,4 @@ def create_comparative_performance_grid(
         plt.savefig(output_file, dpi=300)
 
     return fig
-
 

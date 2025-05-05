@@ -235,7 +235,6 @@ def analyze_feature_importance(
 
     return analysis
 
-
 def plot_comparative_feature_importance(importance_data, output_dir='results/figures'):
     """
     Fixed version to avoid blank mlp_neuron_comparison.png by ensuring data is available.
@@ -293,7 +292,6 @@ def plot_comparative_feature_importance(importance_data, output_dir='results/fig
     for model_type in model_types:
         # Create figure with academic styling
         fig, axes = plt.subplots(1, 3, figsize=(18, 6))
-        # plt.style.use('seaborn-whitegrid')
         plt.style.use('ggplot')
 
         for i, signal_type in enumerate(signal_types):

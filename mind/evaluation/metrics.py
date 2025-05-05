@@ -289,4 +289,3 @@ def generate_metrics_report(
         logger.info(f"Binary classification metrics report saved to {output_file}")
 
     return report
-

@@ -179,18 +179,6 @@ def process_data(
     Process neural data with sliding windows and prepare for ML with minimal preprocessing.
     This version removes aggressive optimizations while ensuring deconvolved signals can show
     their natural advantages.
-
-    Parameters
-    ----------
-    neural_data : Dict[str, np.ndarray]
-        Dictionary containing neural data and labels
-    config : Dict[str, Any]
-        Configuration dictionary
-
-    Returns
-    -------
-    Dict[str, Any]
-        Dictionary containing processed data
     """
     logger.info("Processing data with sliding windows")
 
@@ -216,16 +204,6 @@ def process_data(
     deconv_mat_wanted = neural_data['deconv_mat_wanted']
     labels = neural_data['labels']
 
-    # Validate data shapes
-    if calcium_signal.ndim != 2:
-        raise ValueError(f"calcium_signal must be 2D, got shape {calcium_signal.shape}")
-    if deltaf_cells_not_excluded.ndim != 2:
-        raise ValueError(f"deltaf_cells_not_excluded must be 2D, got shape {deltaf_cells_not_excluded.shape}")
-    if deconv_mat_wanted.ndim != 2:
-        raise ValueError(f"deconv_mat_wanted must be 2D, got shape {deconv_mat_wanted.shape}")
-    if labels.ndim != 1:
-        raise ValueError(f"labels must be 1D, got shape {labels.shape}")
-
     # Get dimensions
     n_frames, n_calcium_neurons = calcium_signal.shape
     _, n_deltaf_neurons = deltaf_cells_not_excluded.shape
@@ -246,17 +224,6 @@ def process_data(
     if np.isnan(deconv_mat_wanted).any():
         logger.warning("deconv_mat_wanted contains NaN values")
         deconv_mat_wanted = np.nan_to_num(deconv_mat_wanted, nan=0.0)
-
-    # Handle infinite values - again, essential preprocessing
-    if not np.isfinite(calcium_signal).all():
-        logger.warning("calcium_signal contains infinite values")
-        calcium_signal = np.nan_to_num(calcium_signal, nan=0.0, posinf=1e10, neginf=-1e10)
-    if not np.isfinite(deltaf_cells_not_excluded).all():
-        logger.warning("deltaf_cells_not_excluded contains infinite values")
-        deltaf_cells_not_excluded = np.nan_to_num(deltaf_cells_not_excluded, nan=0.0, posinf=1e10, neginf=-1e10)
-    if not np.isfinite(deconv_mat_wanted).all():
-        logger.warning("deconv_mat_wanted contains infinite values")
-        deconv_mat_wanted = np.nan_to_num(deconv_mat_wanted, nan=0.0, posinf=1e10, neginf=-1e10)
 
     # Convert to float - basic data preparation
     calcium_signal = calcium_signal.astype(np.float64)
@@ -323,28 +290,6 @@ def process_data(
         'raw_deconv': deconv_mat_wanted,
         'binary_task': True  # Set this to True for binary classification
     }
-
-    # Final validation of all arrays to ensure they are numeric
-    for key, value in processed_data.items():
-        if isinstance(value, np.ndarray):
-            # Check dtype - object dtype might contain dictionaries or other non-numeric values
-            if value.dtype == np.dtype('O'):
-                logger.warning(f"Array {key} still has object dtype after processing.")
-                # Try to convert to appropriate dtype
-                try:
-                    if key.startswith('X_'):
-                        processed_data[key] = value.astype(np.float64)
-                    elif key.startswith('y_'):
-                        processed_data[key] = value.astype(np.int32)
-                except Exception as e:
-                    logger.error(f"Cannot convert {key} to numerical format: {e}")
-                    raise ValueError(f"Cannot convert {key} to numerical format: {e}")
-
-            # Check for NaN or inf values
-            if key.startswith('X_') or key.startswith('raw_'):
-                if np.isnan(value).any() or not np.isfinite(value).all():
-                    logger.warning(f"Array {key} contains NaN or infinite values after processing.")
-                    processed_data[key] = np.nan_to_num(value, nan=0.0, posinf=1e10, neginf=-1e10)
 
     logger.info("Data processing completed successfully")
     return processed_data
