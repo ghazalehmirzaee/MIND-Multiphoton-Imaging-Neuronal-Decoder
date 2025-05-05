@@ -52,7 +52,6 @@ def plot_performance_comparison(
 
     return fig
 
-
 def plot_signal_type_comparison(
         performance_df: pd.DataFrame,
         metric: str = 'F1 (Macro)',
@@ -84,14 +83,16 @@ def plot_signal_type_comparison(
     # Create figure
     fig, ax = plt.subplots(figsize=(12, 8))
 
-    # Plot bar chart
-    sns.barplot(x='Signal Type', y=metric, data=signal_performance, ax=ax, palette='Set3')
+    # Plot bar chart - fixing the deprecation warning
+    sns.barplot(x='Signal Type', y=metric, hue='Signal Type', data=signal_performance,
+                ax=ax, palette='Set3', legend=False)
 
     # Add best model annotations
-    for i, row in enumerate(best_models.itertuples()):
-        signal_type = row._2
-        model = row.Model
-        score = getattr(row, metric.replace(' ', '_'))
+    for i, row in enumerate(best_models.iterrows()):
+        # Use row[1] to access the data (row[0] is the index)
+        signal_type = row[1]['Signal Type']
+        model = row[1]['Model']
+        score = row[1][metric]
 
         # Find index of signal type in signal_performance
         idx = signal_performance[signal_performance['Signal Type'] == signal_type].index[0]
