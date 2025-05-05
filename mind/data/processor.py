@@ -177,7 +177,7 @@ def process_data(
         config: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
-    Process neural data with sliding windows and prepare for ML.
+    Process neural data with sliding windows and prepare for ML with enhanced validation.
 
     Parameters
     ----------
@@ -203,11 +203,29 @@ def process_data(
     scaler_type = config['processing'].get('scaler', 'robust')
     binary_task = config['data'].get('binary_task', True)
 
+    # Validate input data
+    required_keys = ['calcium_signal', 'deltaf_cells_not_excluded', 'deconv_mat_wanted', 'labels']
+    for key in required_keys:
+        if key not in neural_data:
+            raise ValueError(f"Missing required key in neural_data: {key}")
+        if not isinstance(neural_data[key], np.ndarray):
+            raise ValueError(f"Key {key} in neural_data is not a numpy array: {type(neural_data[key])}")
+
     # Extract data
     calcium_signal = neural_data['calcium_signal']
     deltaf_cells_not_excluded = neural_data['deltaf_cells_not_excluded']
     deconv_mat_wanted = neural_data['deconv_mat_wanted']
     labels = neural_data['labels']
+
+    # Validate data shapes
+    if calcium_signal.ndim != 2:
+        raise ValueError(f"calcium_signal must be 2D, got shape {calcium_signal.shape}")
+    if deltaf_cells_not_excluded.ndim != 2:
+        raise ValueError(f"deltaf_cells_not_excluded must be 2D, got shape {deltaf_cells_not_excluded.shape}")
+    if deconv_mat_wanted.ndim != 2:
+        raise ValueError(f"deconv_mat_wanted must be 2D, got shape {deconv_mat_wanted.shape}")
+    if labels.ndim != 1:
+        raise ValueError(f"labels must be 1D, got shape {labels.shape}")
 
     # Get dimensions
     n_frames, n_calcium_neurons = calcium_signal.shape
@@ -219,12 +237,51 @@ def process_data(
     logger.info(f"ΔF/F neurons: {n_deltaf_neurons}")
     logger.info(f"Deconvolved neurons: {n_deconv_neurons}")
 
+    # Check for NaN values
+    if np.isnan(calcium_signal).any():
+        logger.warning("calcium_signal contains NaN values")
+        # Replace NaNs with zeros
+        calcium_signal = np.nan_to_num(calcium_signal, nan=0.0)
+    if np.isnan(deltaf_cells_not_excluded).any():
+        logger.warning("deltaf_cells_not_excluded contains NaN values")
+        deltaf_cells_not_excluded = np.nan_to_num(deltaf_cells_not_excluded, nan=0.0)
+    if np.isnan(deconv_mat_wanted).any():
+        logger.warning("deconv_mat_wanted contains NaN values")
+        deconv_mat_wanted = np.nan_to_num(deconv_mat_wanted, nan=0.0)
+
+    # Check for non-finite values (inf, -inf)
+    if not np.isfinite(calcium_signal).all():
+        logger.warning("calcium_signal contains infinite values")
+        calcium_signal = np.nan_to_num(calcium_signal, nan=0.0, posinf=1e10, neginf=-1e10)
+    if not np.isfinite(deltaf_cells_not_excluded).all():
+        logger.warning("deltaf_cells_not_excluded contains infinite values")
+        deltaf_cells_not_excluded = np.nan_to_num(deltaf_cells_not_excluded, nan=0.0, posinf=1e10, neginf=-1e10)
+    if not np.isfinite(deconv_mat_wanted).all():
+        logger.warning("deconv_mat_wanted contains infinite values")
+        deconv_mat_wanted = np.nan_to_num(deconv_mat_wanted, nan=0.0, posinf=1e10, neginf=-1e10)
+
+    # Ensure all data is numerical (float)
+    try:
+        calcium_signal = calcium_signal.astype(np.float64)
+        deltaf_cells_not_excluded = deltaf_cells_not_excluded.astype(np.float64)
+        deconv_mat_wanted = deconv_mat_wanted.astype(np.float64)
+        labels = labels.astype(np.int32)
+    except Exception as e:
+        logger.error(f"Error converting data to numerical format: {e}")
+        raise ValueError(f"Failed to convert data to numerical format: {e}")
+
     # Smooth signals if requested
     if smooth:
         logger.info(f"Smoothing signals with Savitzky-Golay filter (window={smooth_window}, order={smooth_order})")
-        smoothed_calcium = smooth_signals(calcium_signal, smooth_window, smooth_order)
-        smoothed_deltaf = smooth_signals(deltaf_cells_not_excluded, smooth_window, smooth_order)
-        smoothed_deconv = smooth_signals(deconv_mat_wanted, smooth_window, smooth_order)
+        try:
+            smoothed_calcium = smooth_signals(calcium_signal, smooth_window, smooth_order)
+            smoothed_deltaf = smooth_signals(deltaf_cells_not_excluded, smooth_window, smooth_order)
+            smoothed_deconv = smooth_signals(deconv_mat_wanted, smooth_window, smooth_order)
+        except Exception as e:
+            logger.warning(f"Error during smoothing: {e}. Falling back to original signals.")
+            smoothed_calcium = calcium_signal
+            smoothed_deltaf = deltaf_cells_not_excluded
+            smoothed_deconv = deconv_mat_wanted
     else:
         smoothed_calcium = calcium_signal
         smoothed_deltaf = deltaf_cells_not_excluded
@@ -232,26 +289,44 @@ def process_data(
 
     # Create sliding windows
     logger.info(f"Creating sliding windows (size={window_size}, step={step_size})")
-
-    X_calcium, y_calcium = create_sliding_windows(smoothed_calcium, labels, window_size, step_size)
-    X_deltaf, y_deltaf = create_sliding_windows(smoothed_deltaf, labels, window_size, step_size)
-    X_deconv, y_deconv = create_sliding_windows(smoothed_deconv, labels, window_size, step_size)
+    try:
+        X_calcium, y_calcium = create_sliding_windows(smoothed_calcium, labels, window_size, step_size)
+        X_deltaf, y_deltaf = create_sliding_windows(smoothed_deltaf, labels, window_size, step_size)
+        X_deconv, y_deconv = create_sliding_windows(smoothed_deconv, labels, window_size, step_size)
+    except Exception as e:
+        logger.error(f"Error creating sliding windows: {e}")
+        raise ValueError(f"Failed to create sliding windows: {e}")
 
     logger.info(f"Created {X_calcium.shape[0]} windows for each signal type")
+
+    # Check for any non-numeric values post windowing
+    for name, X in [("X_calcium", X_calcium), ("X_deltaf", X_deltaf), ("X_deconv", X_deconv)]:
+        if np.isnan(X).any() or not np.isfinite(X).all() or X.dtype == np.dtype('O'):
+            logger.warning(f"{name} contains problematic values post-windowing. Attempting to fix.")
+            # Try to fix by replacing problematic values
+            X = np.nan_to_num(X, nan=0.0, posinf=1e10, neginf=-1e10)
+            # Force to float type
+            X = X.astype(np.float64)
 
     # Normalize data if requested
     scalers = {}
     if normalize:
         logger.info(f"Normalizing data using {scaler_type} scaler")
-        X_calcium_norm, scaler_calcium = normalize_data(X_calcium, scaler_type)
-        X_deltaf_norm, scaler_deltaf = normalize_data(X_deltaf, scaler_type)
-        X_deconv_norm, scaler_deconv = normalize_data(X_deconv, scaler_type)
+        try:
+            X_calcium_norm, scaler_calcium = normalize_data(X_calcium, scaler_type)
+            X_deltaf_norm, scaler_deltaf = normalize_data(X_deltaf, scaler_type)
+            X_deconv_norm, scaler_deconv = normalize_data(X_deconv, scaler_type)
 
-        scalers = {
-            'calcium': scaler_calcium,
-            'deltaf': scaler_deltaf,
-            'deconv': scaler_deconv
-        }
+            scalers = {
+                'calcium': scaler_calcium,
+                'deltaf': scaler_deltaf,
+                'deconv': scaler_deconv
+            }
+        except Exception as e:
+            logger.warning(f"Error during normalization: {e}. Falling back to original data.")
+            X_calcium_norm = X_calcium
+            X_deltaf_norm = X_deltaf
+            X_deconv_norm = X_deconv
     else:
         X_calcium_norm = X_calcium
         X_deltaf_norm = X_deltaf
@@ -262,7 +337,8 @@ def process_data(
         # Apply slightly different normalization scale to deconvolved signals to enhance their patterns
         X_deconv_norm = X_deconv_norm * 1.2
 
-    return {
+    # Final validation step - check for any remaining non-numeric or dictionary values
+    processed_data = {
         'X_calcium': X_calcium_norm,
         'y_calcium': y_calcium,
         'X_deltaf': X_deltaf_norm,
@@ -279,6 +355,34 @@ def process_data(
         'raw_deconv': deconv_mat_wanted,
         'binary_task': binary_task
     }
+
+    # Final validation of all arrays to ensure they are numeric
+    for key, value in processed_data.items():
+        if isinstance(value, np.ndarray):
+            # Check dtype - object dtype might contain dictionaries or other non-numeric values
+            if value.dtype == np.dtype('O'):
+                logger.warning(f"Array {key} still has object dtype after processing.")
+                # Sample check for dictionaries
+                sample_flat = value.flatten()[:min(100, value.size)]
+                if any(isinstance(x, dict) for x in sample_flat):
+                    logger.error(f"Array {key} contains dictionary values, which will cause errors.")
+                    # Try to convert, or raise error if not possible
+                    try:
+                        if key.startswith('X_'):
+                            processed_data[key] = value.astype(np.float64)
+                        elif key.startswith('y_'):
+                            processed_data[key] = value.astype(np.int32)
+                    except:
+                        raise ValueError(f"Cannot convert {key} to numerical format due to dictionary values.")
+
+            # Check for NaN or inf values
+            if key.startswith('X_') or key.startswith('raw_'):
+                if np.isnan(value).any() or not np.isfinite(value).all():
+                    logger.warning(f"Array {key} contains NaN or infinite values after processing.")
+                    processed_data[key] = np.nan_to_num(value, nan=0.0, posinf=1e10, neginf=-1e10)
+
+    logger.info("Data processing completed successfully")
+    return processed_data
 
 
 def split_data(

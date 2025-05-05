@@ -2,6 +2,7 @@ import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from typing import Dict, Any, Tuple, Optional
 import logging
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
 logger = logging.getLogger(__name__)
 
@@ -66,38 +67,22 @@ def optimize_random_forest(
         signal_type: str = None,
         random_state: int = 42
 ) -> Tuple[RandomForestClassifier, Dict[str, Any]]:
-    """
-    Train an efficient Random Forest model.
-
-    Parameters
-    ----------
-    X_train : np.ndarray
-        Training features
-    y_train : np.ndarray
-        Training labels
-    X_val : np.ndarray
-        Validation features
-    y_val : np.ndarray
-        Validation labels
-    signal_type : str, optional
-        Signal type to optimize for
-    random_state : int, optional
-        Random state for reproducibility
-
-    Returns
-    -------
-    Tuple[RandomForestClassifier, Dict[str, Any]]
-        Trained model and evaluation metrics
-    """
     # Create model
     model = create_random_forest(signal_type, random_state)
+
+    # Ensure X_train and X_val are numeric arrays
+    if isinstance(X_train, dict) or np.any(
+            [isinstance(x, dict) for x in X_train.flatten() if hasattr(X_train, 'flatten')]):
+        raise ValueError("X_train contains dictionary values. Check your data preprocessing.")
+
+    if isinstance(X_val, dict) or np.any([isinstance(x, dict) for x in X_val.flatten() if hasattr(X_val, 'flatten')]):
+        raise ValueError("X_val contains dictionary values. Check your data preprocessing.")
 
     # Train model
     model.fit(X_train, y_train.astype(int))
 
-    # Evaluate model
-    from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
+    # Evaluate model
     y_pred = model.predict(X_val)
     y_prob = model.predict_proba(X_val)
 
