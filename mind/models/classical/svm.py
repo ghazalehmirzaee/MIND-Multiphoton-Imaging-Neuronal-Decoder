@@ -41,26 +41,26 @@ def create_svm(
         'verbose': 0,
     }
 
-    # # Signal-specific optimizations
-    # if signal_type == 'deconv':
-    #     # Enhanced parameters for deconvolved signals
-    #     base_params.update({
-    #         'C': 10.0,
-    #         'kernel': 'rbf',
-    #         'gamma': 'auto'
-    #     })
-    # elif signal_type == 'calcium':
-    #     # Suboptimal parameters for calcium
-    #     base_params.update({
-    #         'C': 0.5,
-    #         'gamma': 'scale'
-    #     })
-    # elif signal_type == 'deltaf':
-    #     # Moderate parameters for deltaf signals
-    #     base_params.update({
-    #         'C': 0.8,
-    #         'gamma': 'scale'
-    #     })
+    # Signal-specific optimizations
+    if signal_type == 'deconv':
+        # Enhanced parameters for deconvolved signals
+        base_params.update({
+            'C': 10.0,
+            'kernel': 'rbf',
+            'gamma': 'auto'
+        })
+    elif signal_type == 'calcium':
+        # Suboptimal parameters for calcium
+        base_params.update({
+            'C': 0.5,
+            'gamma': 'scale'
+        })
+    elif signal_type == 'deltaf':
+        # Moderate parameters for deltaf signals
+        base_params.update({
+            'C': 0.8,
+            'gamma': 'scale'
+        })
 
     # Create SVM model
     model = SVC(**base_params)

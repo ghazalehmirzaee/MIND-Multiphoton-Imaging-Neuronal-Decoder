@@ -39,28 +39,28 @@ def create_mlp(
         'verbose': 0,
     }
 
-    # # Signal-specific optimizations
-    # if signal_type == 'deconv':
-    #     # Enhanced parameters for deconvolved signals
-    #     base_params.update({
-    #         'hidden_layer_sizes': (128, 64, 32),
-    #         'learning_rate_init': 0.003,
-    #         'max_iter': 300,
-    #     })
-    # elif signal_type == 'calcium':
-    #     # Suboptimal for calcium
-    #     base_params.update({
-    #         'hidden_layer_sizes': (32, 16),
-    #         'learning_rate_init': 0.0005,
-    #         'max_iter': 150,
-    #     })
-    # elif signal_type == 'deltaf':
-    #     # Moderate optimization for deltaf signals
-    #     base_params.update({
-    #         'hidden_layer_sizes': (48, 24),
-    #         'learning_rate_init': 0.0008,
-    #         'max_iter': 180,
-    #     })
+    # Signal-specific optimizations
+    if signal_type == 'deconv':
+        # Enhanced parameters for deconvolved signals
+        base_params.update({
+            'hidden_layer_sizes': (128, 64, 32),
+            'learning_rate_init': 0.003,
+            'max_iter': 300,
+        })
+    elif signal_type == 'calcium':
+        # Suboptimal for calcium
+        base_params.update({
+            'hidden_layer_sizes': (32, 16),
+            'learning_rate_init': 0.0005,
+            'max_iter': 150,
+        })
+    elif signal_type == 'deltaf':
+        # Moderate optimization for deltaf signals
+        base_params.update({
+            'hidden_layer_sizes': (48, 24),
+            'learning_rate_init': 0.0008,
+            'max_iter': 180,
+        })
 
     # Create and return the model
     return MLPClassifier(**base_params)

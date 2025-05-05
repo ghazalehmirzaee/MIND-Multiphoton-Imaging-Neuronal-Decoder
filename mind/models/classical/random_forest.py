@@ -39,27 +39,6 @@ def create_random_forest(
         'verbose': 0,
     }
 
-    # # Signal-specific optimizations - optimize only deconvolved signals
-    # if signal_type == 'deconv':
-    #     # Enhanced parameters for deconvolved signals - more trees for better accuracy
-    #     base_params.update({
-    #         'n_estimators': 200,
-    #         'max_depth': 30,
-    #         'min_samples_split': 2,
-    #         'min_samples_leaf': 1
-    #     })
-    # # Intentionally using suboptimal parameters for calcium and deltaf
-    # elif signal_type == 'calcium':
-    #     base_params.update({
-    #         'n_estimators': 30,
-    #         'max_depth': 10,
-    #     })
-    # elif signal_type == 'deltaf':
-    #     base_params.update({
-    #         'n_estimators': 40,
-    #         'max_depth': 12,
-    #     })
-
     # Create and return the model
     return RandomForestClassifier(**base_params)
 

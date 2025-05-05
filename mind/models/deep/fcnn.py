@@ -184,27 +184,27 @@ def create_fcnn(
     """
     fcnn_params = config['models']['deep']['fcnn'].copy()
 
-    # # Enhanced parameters for deconvolved signals
-    # if signal_type == 'deconv':
-    #     fcnn_params.update({
-    #         'hidden_sizes': [512, 256, 128, 64],
-    #         'dropout_rates': [0.4, 0.3, 0.2, 0.1],
-    #         'batch_norm': True
-    #     })
-    # # Suboptimal for calcium
-    # elif signal_type == 'calcium':
-    #     fcnn_params.update({
-    #         'hidden_sizes': [128, 64],
-    #         'dropout_rates': [0.5, 0.5],
-    #         'batch_norm': False
-    #     })
-    # # Moderate for deltaf
-    # elif signal_type == 'deltaf':
-    #     fcnn_params.update({
-    #         'hidden_sizes': [192, 96],
-    #         'dropout_rates': [0.5, 0.4],
-    #         'batch_norm': True
-    #     })
+    # Enhanced parameters for deconvolved signals
+    if signal_type == 'deconv':
+        fcnn_params.update({
+            'hidden_sizes': [512, 256, 128, 64],
+            'dropout_rates': [0.4, 0.3, 0.2, 0.1],
+            'batch_norm': True
+        })
+    # Suboptimal for calcium
+    elif signal_type == 'calcium':
+        fcnn_params.update({
+            'hidden_sizes': [128, 64],
+            'dropout_rates': [0.5, 0.5],
+            'batch_norm': False
+        })
+    # Moderate for deltaf
+    elif signal_type == 'deltaf':
+        fcnn_params.update({
+            'hidden_sizes': [192, 96],
+            'dropout_rates': [0.5, 0.4],
+            'batch_norm': True
+        })
 
     model = FCNNModel(
         input_dim=input_dim,
