@@ -92,7 +92,6 @@ def plot_raw_signals(
 
     return figures
 
-# In mind/visualization/signal_visualization.py - Update heatmap function to remove grids
 
 def plot_signal_heatmaps(
         data: Dict[str, np.ndarray],
@@ -124,6 +123,9 @@ def plot_signal_heatmaps(
     # Initialize figures dictionary
     figures = {}
 
+    # Use a clean style without grid
+    plt.style.use('default')
+
     # Plot each signal type
     for signal_type in signal_types:
         # Get raw data key
@@ -136,7 +138,7 @@ def plot_signal_heatmaps(
         # Get raw data
         raw_data = data[raw_key]
 
-        # Select neurons - prioritize using top neurons from feature importance
+        # Select neurons
         if 'feature_importance' in data:
             # Try to get top neurons from feature importance
             fi_key = f"{signal_type}_rf"
@@ -163,10 +165,17 @@ def plot_signal_heatmaps(
         # Get data for selected neurons
         selected_data = raw_data[:, selected_neurons]
 
-        # Create figure
+        # Create figure without grid
         fig, ax = plt.subplots(figsize=(15, 10))
 
-        # Plot heatmap without grid
+        # Turn off the grid explicitly
+        ax.grid(False)
+
+        # Remove all box lines
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+
+        # Plot heatmap without grid using imshow
         im = ax.imshow(selected_data.T, aspect='auto', cmap='viridis', interpolation='none')
 
         # Set title and labels
@@ -186,6 +195,9 @@ def plot_signal_heatmaps(
 
         # Store figure
         figures[f'{signal_type}_heatmap'] = fig
+
+    # Restore original style
+    plt.style.use('default')
 
     return figures
 
