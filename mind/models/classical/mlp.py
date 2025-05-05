@@ -6,7 +6,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def create_efficient_mlp(
+def create_mlp(
         signal_type: str = None,
         random_state: int = 42
 ) -> MLPClassifier:
@@ -59,7 +59,7 @@ def create_efficient_mlp(
     return MLPClassifier(**base_params)
 
 
-def train_efficient_mlp(
+def train_mlp(
         X_train: np.ndarray,
         y_train: np.ndarray,
         X_val: np.ndarray,
@@ -91,7 +91,7 @@ def train_efficient_mlp(
         Trained model and evaluation metrics
     """
     # Create model
-    model = create_efficient_mlp(signal_type, random_state)
+    model = create_mlp(signal_type, random_state)
 
     # Train model
     model.fit(X_train, y_train.astype(int))

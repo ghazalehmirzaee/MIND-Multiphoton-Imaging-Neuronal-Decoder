@@ -7,7 +7,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def create_efficient_svm(
+def create_svm(
         signal_type: str = None,
         n_features: int = None,
         random_state: int = 42
@@ -67,7 +67,7 @@ def create_efficient_svm(
     return model, pca
 
 
-def train_efficient_svm(
+def train_svm(
         X_train: np.ndarray,
         y_train: np.ndarray,
         X_val: np.ndarray,
@@ -99,7 +99,7 @@ def train_efficient_svm(
         Trained model, evaluation metrics, and PCA transformer (if used)
     """
     # Create model with PCA if needed
-    model, pca = create_efficient_svm(signal_type, X_train.shape[1], random_state)
+    model, pca = create_svm(signal_type, X_train.shape[1], random_state)
 
     # Apply PCA if needed
     if pca is not None:
