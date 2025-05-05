@@ -258,12 +258,12 @@ def plot_binary_confusion_matrices(
     return fig
 
 
-def plot_roc_curves(
+def plot_binary_roc_curves(
         results: Dict[str, Dict[str, Dict[str, Any]]],
         output_dir: Optional[str] = None
 ) -> Dict[str, plt.Figure]:
     """
-    Plot ROC curves for each model and signal type.
+    Create ROC curves for binary classification tasks.
 
     Parameters
     ----------
@@ -277,76 +277,140 @@ def plot_roc_curves(
     Dict[str, plt.Figure]
         Dictionary containing ROC curve figures
     """
-    # Initialize figures dictionary
-    figures = {}
-
-    # Define signal types and model types
     signal_types = ['calcium', 'deltaf', 'deconv']
     model_types = ['random_forest', 'svm', 'mlp', 'fcnn', 'cnn']
+    figures = {}
 
-    # Define class names
-    class_names = ['No footstep', 'Contralateral', 'Ipsilateral']
-
-    # Create figure for each signal type and model type
+    # ROC curves by signal type (comparing models)
     for signal_type in signal_types:
         if signal_type not in results:
             logger.warning(f"Results for signal type {signal_type} not found")
             continue
+
+        fig, ax = plt.subplots(figsize=(10, 8))
 
         for model_type in model_types:
             if model_type not in results[signal_type]:
                 logger.warning(f"Results for model type {model_type} not found in {signal_type}")
                 continue
 
-            # Extract predictions, probabilities, and targets
             metrics = results[signal_type][model_type]
             if 'probabilities' not in metrics or 'targets' not in metrics:
                 logger.warning(f"Probabilities or targets not found in {signal_type}_{model_type}")
                 continue
 
-            y_prob = metrics.get('probabilities')
+            y_prob = metrics['probabilities']
             y_true = metrics['targets']
 
-            # Check if probabilities are available
-            if y_prob is None:
-                logger.warning(f"Probabilities not available for {signal_type}_{model_type}")
+            # For binary classification, use probability for class 1
+            if y_prob.shape[1] > 1:
+                y_prob_positive = y_prob[:, 1]
+            else:
+                y_prob_positive = y_prob
+
+            # Calculate ROC curve
+            fpr, tpr, _ = roc_curve(y_true, y_prob_positive)
+            roc_auc = auc(fpr, tpr)
+
+            # Plot ROC curve with customized line style and thickness
+            line_styles = {
+                'random_forest': '-',
+                'svm': '--',
+                'mlp': '-.',
+                'fcnn': ':',
+                'cnn': '-'
+            }
+
+            line_widths = {
+                'random_forest': 2,
+                'svm': 2,
+                'mlp': 2,
+                'fcnn': 2.5,
+                'cnn': 2.5
+            }
+
+            colors = {
+                'random_forest': 'blue',
+                'svm': 'green',
+                'mlp': 'red',
+                'fcnn': 'purple',
+                'cnn': 'orange'
+            }
+
+            # Plot with custom styling
+            ax.plot(fpr, tpr,
+                    linestyle=line_styles.get(model_type, '-'),
+                    linewidth=line_widths.get(model_type, 2),
+                    color=colors.get(model_type, None),
+                    label=f'{model_type.upper()} (AUC = {roc_auc:.3f})')
+
+        # Add reference line
+        ax.plot([0, 1], [0, 1], 'k--', lw=1.5)
+
+        ax.set_title(f'ROC Curves - {signal_type.capitalize()} Signal', fontsize=14)
+        ax.set_xlabel('False Positive Rate', fontsize=12)
+        ax.set_ylabel('True Positive Rate', fontsize=12)
+        ax.set_xlim([0.0, 1.0])
+        ax.set_ylim([0.0, 1.05])
+        ax.legend(loc='lower right', fontsize=10)
+        ax.grid(alpha=0.3)
+
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
+            plt.savefig(os.path.join(output_dir, f'{signal_type}_roc_curves.png'), dpi=300)
+
+        figures[f'{signal_type}_roc_curves'] = fig
+
+    # ROC curves by model type (comparing signal types)
+    for model_type in model_types:
+        fig, ax = plt.subplots(figsize=(10, 8))
+
+        for signal_type in signal_types:
+            if signal_type not in results or model_type not in results[signal_type]:
                 continue
 
-            # Create figure
-            fig, ax = plt.subplots(figsize=(10, 8))
+            metrics = results[signal_type][model_type]
+            if 'probabilities' not in metrics or 'targets' not in metrics:
+                continue
 
-            # Calculate ROC curve and AUC for each class
-            classes = np.unique(y_true)
-            for i, cls in enumerate(classes):
-                # Create binary labels for the current class
-                y_true_binary = (y_true == cls).astype(int)
+            y_prob = metrics['probabilities']
+            y_true = metrics['targets']
 
-                # Calculate ROC curve and AUC
-                if i < y_prob.shape[1]:
-                    fpr, tpr, _ = roc_curve(y_true_binary, y_prob[:, i])
-                    roc_auc = auc(fpr, tpr)
+            # For binary classification, use probability for class 1
+            if y_prob.shape[1] > 1:
+                y_prob_positive = y_prob[:, 1]
+            else:
+                y_prob_positive = y_prob
 
-                    # Plot ROC curve
-                    ax.plot(fpr, tpr, lw=2, label=f'Class {class_names[int(cls)]} (AUC = {roc_auc:.2f})')
+            # Calculate ROC curve
+            fpr, tpr, _ = roc_curve(y_true, y_prob_positive)
+            roc_auc = auc(fpr, tpr)
 
-            # Plot random guess line
-            ax.plot([0, 1], [0, 1], 'k--', lw=2)
+            # Plot with custom styling
+            colors = {
+                'calcium': 'blue',
+                'deltaf': 'green',
+                'deconv': 'red'
+            }
 
-            # Set title and labels
-            ax.set_title(f'ROC Curve - {signal_type} - {model_type}')
-            ax.set_xlabel('False Positive Rate')
-            ax.set_ylabel('True Positive Rate')
-            ax.set_xlim([0.0, 1.0])
-            ax.set_ylim([0.0, 1.05])
-            ax.legend(loc='lower right')
+            ax.plot(fpr, tpr, lw=2, color=colors.get(signal_type, None),
+                    label=f'{signal_type.capitalize()} (AUC = {roc_auc:.3f})')
 
-            # Save figure
-            if output_dir:
-                os.makedirs(output_dir, exist_ok=True)
-                plt.savefig(os.path.join(output_dir, f'{signal_type}_{model_type}_roc_curve.png'), dpi=300)
+        # Add reference line
+        ax.plot([0, 1], [0, 1], 'k--', lw=1.5)
 
-            # Store figure
-            figures[f'{signal_type}_{model_type}_roc_curve'] = fig
+        ax.set_title(f'ROC Curves - {model_type.upper()} Model', fontsize=14)
+        ax.set_xlabel('False Positive Rate', fontsize=12)
+        ax.set_ylabel('True Positive Rate', fontsize=12)
+        ax.set_xlim([0.0, 1.0])
+        ax.set_ylim([0.0, 1.05])
+        ax.legend(loc='lower right', fontsize=10)
+        ax.grid(alpha=0.3)
+
+        if output_dir:
+            plt.savefig(os.path.join(output_dir, f'{model_type}_roc_curves.png'), dpi=300)
+
+        figures[f'{model_type}_roc_curves'] = fig
 
     return figures
 
