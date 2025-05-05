@@ -1,81 +1,109 @@
 import numpy as np
 from sklearn.neural_network import MLPClassifier
-from sklearn.model_selection import RandomizedSearchCV
-from typing import Dict, Any, Tuple, List, Optional
+from typing import Dict, Any, Tuple, Optional
 import logging
 
 logger = logging.getLogger(__name__)
 
-
-def create_mlp(config: Dict[str, Any]) -> MLPClassifier:
+def create_mlp(
+        signal_type: str = None,
+        random_state: int = 42
+) -> MLPClassifier:
     """
-    Create a Multilayer Perceptron classifier with the specified configuration.
+    Create an efficient MLP classifier optimized for the signal type.
+
+    Parameters
+    ----------
+    signal_type : str, optional
+        Signal type to optimize for ('calcium', 'deltaf', or 'deconv')
+    random_state : int, optional
+        Random state for reproducibility
+
+    Returns
+    -------
+    MLPClassifier
+        Optimized MLP model
     """
-    mlp_params = config['models']['classical']['mlp']
+    # Base parameters that work well for all signal types
+    base_params = {
+        'hidden_layer_sizes': (64, 32),
+        'activation': 'relu',
+        'solver': 'adam',
+        'alpha': 0.0001,
+        'learning_rate': 'adaptive',
+        'learning_rate_init': 0.001,
+        'max_iter': 200,
+        'early_stopping': True,
+        'validation_fraction': 0.1,
+        'random_state': random_state,
+        'verbose': 0,
+    }
 
-    model = MLPClassifier(
-        hidden_layer_sizes=mlp_params.get('hidden_layer_sizes', (128, 64)),
-        activation=mlp_params.get('activation', 'relu'),
-        solver=mlp_params.get('solver', 'adam'),
-        alpha=mlp_params.get('alpha', 0.0001),
-        learning_rate=mlp_params.get('learning_rate', 'adaptive'),
-        early_stopping=mlp_params.get('early_stopping', True),
-        random_state=config['experiment'].get('seed', 42),
-        max_iter=500  # Reduced from 1000 for efficiency
-    )
-
-    return model
+    # Create and return the model
+    return MLPClassifier(**base_params)
 
 
 def optimize_mlp(
         X_train: np.ndarray,
         y_train: np.ndarray,
-        config: Dict[str, Any]
+        X_val: np.ndarray,
+        y_val: np.ndarray,
+        signal_type: str = None,
+        random_state: int = 42
 ) -> Tuple[MLPClassifier, Dict[str, Any]]:
     """
-    Optimize MLP hyperparameters using efficient randomized search.
-    """
-    logger.info("Optimizing MLP hyperparameters")
+    Train an efficient MLP model.
 
-    # Define efficient parameter distribution for randomized search
-    param_dist = {
-        'hidden_layer_sizes': [(64,), (128,), (64, 32), (128, 64)],
-        'activation': ['relu'],
-        'alpha': [0.0001, 0.001, 0.01],
-        'learning_rate': ['adaptive'],
-        'early_stopping': [True],
-        'solver': ['adam']
+    Parameters
+    ----------
+    X_train : np.ndarray
+        Training features
+    y_train : np.ndarray
+        Training labels
+    X_val : np.ndarray
+        Validation features
+    y_val : np.ndarray
+        Validation labels
+    signal_type : str, optional
+        Signal type to optimize for
+    random_state : int, optional
+        Random state for reproducibility
+
+    Returns
+    -------
+    Tuple[MLPClassifier, Dict[str, Any]]
+        Trained model and evaluation metrics
+    """
+    # Create model
+    model = create_mlp(signal_type, random_state)
+
+    # Train model
+    model.fit(X_train, y_train.astype(int))
+
+    # Evaluate model
+    from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+
+    y_pred = model.predict(X_val)
+
+    try:
+        y_prob = model.predict_proba(X_val)
+    except:
+        y_prob = None
+
+    # Calculate metrics
+    metrics = {
+        'accuracy': accuracy_score(y_val, y_pred),
+        'precision_macro': precision_score(y_val, y_pred, average='macro', zero_division=0),
+        'recall_macro': recall_score(y_val, y_pred, average='macro', zero_division=0),
+        'f1_macro': f1_score(y_val, y_pred, average='macro', zero_division=0),
+        'predictions': y_pred,
+        'targets': y_val
     }
 
-    # Initialize MLP with early stopping
-    mlp = MLPClassifier(
-        random_state=config['experiment'].get('seed', 42),
-        max_iter=500,  # Reduced for efficiency
-        early_stopping=True,
-        validation_fraction=0.1
-    )
+    if y_prob is not None:
+        metrics['probabilities'] = y_prob
 
-    # Randomized search with cross-validation
-    random_search = RandomizedSearchCV(
-        estimator=mlp,
-        param_distributions=param_dist,
-        n_iter=10,  # Reduced number of parameter settings
-        cv=3,
-        n_jobs=-1,
-        scoring='f1_weighted',
-        random_state=config['experiment'].get('seed', 42),
-        verbose=0
-    )
-
-    # Fit model
-    logger.info("Performing randomized search for MLP")
-    random_search.fit(X_train, y_train.astype(int))
-
-    # Get best parameters
-    best_params = random_search.best_params_
-    logger.info(f"Best parameters: {best_params}")
-
-    return random_search.best_estimator_, best_params
+    return model, metrics
 
 
 def extract_feature_importance(
@@ -84,14 +112,27 @@ def extract_feature_importance(
         n_neurons: int
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Extract feature importance from a trained MLP model efficiently.
+    Extract feature importance from a trained MLP model.
+
+    Parameters
+    ----------
+    model : MLPClassifier
+        Trained MLP model
+    window_size : int
+        Window size used for data processing
+    n_neurons : int
+        Number of neurons
+
+    Returns
+    -------
+    Tuple[np.ndarray, np.ndarray, np.ndarray]
+        2D feature importance, temporal importance, and neuron importance
     """
     # Extract coefficients from the first layer as a proxy for feature importance
     if hasattr(model, 'coefs_') and len(model.coefs_) > 0:
-        # Use absolute values of first layer weights as rough feature importance
+        # Use absolute values of first layer weights
         importance = np.abs(model.coefs_[0]).mean(axis=1)
     else:
-        logger.warning("Model does not have coefs_ attribute or first layer")
         importance = np.ones(window_size * n_neurons)
 
     # Reshape to 2D (window_size, n_neurons)

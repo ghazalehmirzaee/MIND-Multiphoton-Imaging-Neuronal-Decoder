@@ -92,36 +92,15 @@ def plot_raw_signals(
 
     return figures
 
-
-def plot_signal_heatmaps(
-        data: Dict[str, np.ndarray],
-        signal_types: List[str] = ['calcium', 'deltaf', 'deconv'],
-        num_neurons: int = 250,
-        output_dir: Optional[str] = None
-) -> Dict[str, plt.Figure]:
-    """
-    Plot signal heatmaps for each signal type.
-
-    Parameters
-    ----------
-    data : Dict[str, np.ndarray]
-        Dictionary containing raw data
-    signal_types : List[str], optional
-        List of signal types to plot, by default ['calcium', 'deltaf', 'deconv']
-    num_neurons : int, optional
-        Number of neurons to include in heatmap, by default 250
-    output_dir : Optional[str], optional
-        Output directory, by default None
-
-    Returns
-    -------
-    Dict[str, plt.Figure]
-        Dictionary containing signal heatmap figures
-    """
-    logger.info("Plotting signal heatmaps")
+def plot_signal_heatmaps(data, signal_types=['calcium', 'deltaf', 'deconv'], num_neurons=250, output_dir=None):
+    """Plot signal heatmaps for each signal type without any grids."""
+    logger.info("Plotting signal heatmaps without grids")
 
     # Initialize figures dictionary
     figures = {}
+
+    # Use a clean style without grid
+    plt.style.use('default')
 
     # Plot each signal type
     for signal_type in signal_types:
@@ -148,12 +127,12 @@ def plot_signal_heatmaps(
                     # Randomly select neurons
                     np.random.seed(42)
                     selected_neurons = np.random.choice(raw_data.shape[1], min(num_neurons, raw_data.shape[1]),
-                                                        replace=False)
+                                                      replace=False)
             else:
                 # Randomly select neurons
                 np.random.seed(42)
                 selected_neurons = np.random.choice(raw_data.shape[1], min(num_neurons, raw_data.shape[1]),
-                                                    replace=False)
+                                                  replace=False)
         else:
             # Randomly select neurons
             np.random.seed(42)
@@ -162,19 +141,27 @@ def plot_signal_heatmaps(
         # Get data for selected neurons
         selected_data = raw_data[:, selected_neurons]
 
-        # Create figure
+        # Create figure without grid
         fig, ax = plt.subplots(figsize=(15, 10))
 
-        # Plot heatmap
-        im = ax.imshow(selected_data.T, aspect='auto', cmap='viridis')
+        # Turn off the grid explicitly
+        ax.grid(False)
+
+        # Remove all box lines
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+
+        # Plot heatmap without grid using imshow
+        im = ax.imshow(selected_data.T, aspect='auto', cmap='viridis', interpolation='none')
 
         # Set title and labels
-        ax.set_title(f'{signal_type.capitalize()} Signal Heatmap - Top {len(selected_neurons)} Neurons')
-        ax.set_xlabel('Time Frame')
-        ax.set_ylabel('Neuron Index')
+        ax.set_title(f'{signal_type.capitalize()} Signal Heatmap - Top {len(selected_neurons)} Neurons', fontsize=16)
+        ax.set_xlabel('Time Frame', fontsize=14)
+        ax.set_ylabel('Neuron Index', fontsize=14)
 
         # Add colorbar
-        plt.colorbar(im, ax=ax)
+        cbar = plt.colorbar(im, ax=ax)
+        cbar.set_label('Signal Intensity')
 
         # Save figure if output_dir is provided
         if output_dir:
@@ -184,6 +171,9 @@ def plot_signal_heatmaps(
 
         # Store figure
         figures[f'{signal_type}_heatmap'] = fig
+
+    # Restore original style
+    plt.style.use('default')
 
     return figures
 
@@ -268,7 +258,6 @@ def plot_signal_scatter(
         figures[f'{signal_type}_scatter'] = fig
 
     return figures
-
 
 def plot_signal_comparison(
         data: Dict[str, np.ndarray],
@@ -470,7 +459,6 @@ def plot_signal_vertical_comparison(
         plt.savefig(fig_path, dpi=300)
 
     return fig
-
 
 def create_signal_visualizations(
         data: Dict[str, Any],

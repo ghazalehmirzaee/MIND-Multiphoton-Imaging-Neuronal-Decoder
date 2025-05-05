@@ -111,7 +111,7 @@ def train_fcnn_model(
         wandb_run: Any = None
 ) -> Tuple[nn.Module, Dict[str, Any]]:
     """
-    Train a Fully Connected Neural Network model.
+    Train a Fully Connected Neural Network model with signal-specific optimizations.
 
     Parameters
     ----------
@@ -133,6 +133,38 @@ def train_fcnn_model(
     """
     logger.info(f"Training FCNN model for {signal_type} signal")
 
+def train_random_forest(X_train, y_train, X_val, y_val, config, optimize=True, class_weights=None, signal_type=None):
+    """Train a Random Forest model for binary classification."""
+    logger.info(f"Training Random Forest for {signal_type if signal_type else 'general'} data")
+
+    # Create model
+    model = create_random_forest(signal_type, config['experiment'].get('seed', 42))
+
+    # Apply class weights if provided
+    if class_weights is not None:
+        model.class_weight = class_weights
+
+    # Train model - convert to binary classification
+    model.fit(X_train, y_train.astype(int))
+
+    # Evaluate model
+    y_pred = model.predict(X_val)
+    y_prob = model.predict_proba(X_val)
+
+    # Calculate metrics
+    metrics = {
+        'accuracy': accuracy_score(y_val, y_pred),
+        'precision_macro': precision_score(y_val, y_pred, average='macro', zero_division=0),
+        'recall_macro': recall_score(y_val, y_pred, average='macro', zero_division=0),
+        'f1_macro': f1_score(y_val, y_pred, average='macro', zero_division=0),
+        'predictions': y_pred,
+        'probabilities': y_prob,
+        'targets': y_val
+    }
+
+    return model, metrics
+
+
     # Create dataloaders
     dataloaders = create_dataloaders(
         data, signal_type,
@@ -147,24 +179,57 @@ def train_fcnn_model(
     train_loader = dataloaders['train_loader']
     val_loader = dataloaders['val_loader']
 
-    # Create model
-    model = create_fcnn(input_dim, n_classes, config)
+    # Create model with signal-specific optimizations
+    model = create_fcnn(input_dim, n_classes, config, signal_type)
     model = model.to(device)
 
-    # Create optimizer
-    optimizer = create_optimizer(model, config)
+    # Create optimizer with adjusted learning rate for deconvolved signals
+    if signal_type == 'deconv':
+        # Higher learning rate for deconvolved signals
+        lr_multiplier = 1.2
+        weight_decay = 5e-6  # Reduced weight decay for better flexibility
+    else:
+        lr_multiplier = 1.0
+        weight_decay = config['training'].get('weight_decay', 1e-5)
 
-    # Create scheduler factory
-    scheduler_fn = create_scheduler(
-        optimizer, config, len(dataloaders['X_train']),
-        config['training'].get('batch_size', 32)
+    optimizer = optim.AdamW(
+        model.parameters(),
+        lr=config['training'].get('learning_rate', 0.001) * lr_multiplier,
+        weight_decay=weight_decay
     )
+
+    # Create scheduler factory with adjusted parameters for deconvolved signals
+    if signal_type == 'deconv':
+        def scheduler_fn(optimizer, num_epochs):
+            # Calculate steps per epoch
+            steps_per_epoch = (len(dataloaders['X_train']) +
+                               config['training'].get('batch_size', 32) - 1) // config['training'].get('batch_size', 32)
+
+            # OneCycleLR with higher max_lr for deconvolved signals
+            return optim.lr_scheduler.OneCycleLR(
+                optimizer,
+                max_lr=config['training'].get('learning_rate', 0.001) * 1.5,  # 50% higher max_lr
+                epochs=num_epochs,
+                steps_per_epoch=steps_per_epoch,
+                pct_start=0.3,
+                anneal_strategy='cos',
+                div_factor=20.0,  # Lower div_factor for higher initial learning rate
+                final_div_factor=1e4
+            )
+    else:
+        scheduler_fn = create_scheduler(
+            optimizer, config, len(dataloaders['X_train']),
+            config['training'].get('batch_size', 32)
+        )
 
     # Get class weights if available
     class_weights = data.get('class_weights', {}).get(signal_type, None)
 
-    # Create loss function
-    if class_weights is not None:
+    # Create loss function based on signal type
+    if signal_type == 'deconv':
+        # Use focal loss for deconvolved signals to better handle class imbalance
+        criterion = FocalLoss(alpha=2.0, gamma=2.0)
+    elif class_weights is not None:
         # Convert to PyTorch tensor
         weight_tensor = torch.ones(n_classes, device=device)
         for cls, weight in class_weights.items():
@@ -205,7 +270,7 @@ def train_cnn_model(
         wandb_run: Any = None
 ) -> Tuple[nn.Module, Dict[str, Any]]:
     """
-    Train a Convolutional Neural Network model.
+    Train a Convolutional Neural Network model with signal-specific optimizations.
 
     Parameters
     ----------
@@ -242,24 +307,57 @@ def train_cnn_model(
     train_loader = dataloaders['train_loader']
     val_loader = dataloaders['val_loader']
 
-    # Create model
-    model = create_cnn(n_neurons, window_size, n_classes, config)
+    # Create model with signal-specific optimizations
+    model = create_cnn(n_neurons, window_size, n_classes, config, signal_type)
     model = model.to(device)
 
-    # Create optimizer
-    optimizer = create_optimizer(model, config)
+    # Create optimizer with adjusted parameters for deconvolved signals
+    if signal_type == 'deconv':
+        # Higher learning rate and lower weight decay for deconvolved signals
+        lr_multiplier = 1.3
+        weight_decay = 1e-6  # Lower weight decay for better flexibility
+    else:
+        lr_multiplier = 1.0
+        weight_decay = config['training'].get('weight_decay', 1e-5)
 
-    # Create scheduler factory
-    scheduler_fn = create_scheduler(
-        optimizer, config, len(dataloaders['X_train']),
-        config['training'].get('batch_size', 32)
+    optimizer = optim.AdamW(
+        model.parameters(),
+        lr=config['training'].get('learning_rate', 0.001) * lr_multiplier,
+        weight_decay=weight_decay
     )
+
+    # Create scheduler factory with adjusted parameters for deconvolved signals
+    if signal_type == 'deconv':
+        def scheduler_fn(optimizer, num_epochs):
+            # Calculate steps per epoch
+            steps_per_epoch = (len(dataloaders['X_train']) +
+                               config['training'].get('batch_size', 32) - 1) // config['training'].get('batch_size', 32)
+
+            # OneCycleLR with higher max_lr for deconvolved signals
+            return optim.lr_scheduler.OneCycleLR(
+                optimizer,
+                max_lr=config['training'].get('learning_rate', 0.001) * 1.6,  # 60% higher max_lr
+                epochs=num_epochs,
+                steps_per_epoch=steps_per_epoch,
+                pct_start=0.25,  # Faster warmup
+                anneal_strategy='cos',
+                div_factor=15.0,  # Lower div_factor for higher initial learning rate
+                final_div_factor=1e4
+            )
+    else:
+        scheduler_fn = create_scheduler(
+            optimizer, config, len(dataloaders['X_train']),
+            config['training'].get('batch_size', 32)
+        )
 
     # Get class weights if available
     class_weights = data.get('class_weights', {}).get(signal_type, None)
 
     # Create loss function
-    if class_weights is not None:
+    if signal_type == 'deconv':
+        # Use focal loss with higher alpha for deconvolved signals
+        criterion = FocalLoss(alpha=2.5, gamma=2.0)
+    elif class_weights is not None:
         # Use focal loss for imbalanced data
         criterion = FocalLoss(alpha=2.0, gamma=2.0)
     else:
@@ -268,7 +366,15 @@ def train_cnn_model(
     # Create model name
     model_name = create_model_name(signal_type, 'cnn')
 
-    # Train model
+    # Train model with more epochs for deconvolved signals
+    if signal_type == 'deconv':
+        # Make a copy of config to increase epochs for deconvolved signal
+        local_config = config.copy()
+        local_config['training'] = config['training'].copy()
+        local_config['training']['epochs'] = int(config['training'].get('epochs', 100) * 1.2)
+    else:
+        local_config = config
+
     model, history = train_model(
         model=model,
         train_loader=train_loader,
@@ -276,7 +382,7 @@ def train_cnn_model(
         criterion=criterion,
         optimizer=optimizer,
         device=device,
-        config=config,
+        config=local_config,
         scheduler_fn=scheduler_fn,
         class_weights=class_weights,
         model_name=model_name,
@@ -402,11 +508,29 @@ def evaluate_deep_model(
     all_probs = np.concatenate(all_probs)
     all_targets = np.concatenate(all_targets)
 
+    # Ensure binary classification (0 vs 1)
+    if len(np.unique(all_targets)) > 2:
+        logger.warning(f"Converting multi-class targets to binary for {model_name}")
+        binary_targets = (all_targets > 0).astype(int)
+        all_targets = binary_targets
+
+        binary_preds = (all_preds > 0).astype(int)
+        all_preds = binary_preds
+
     # Calculate metrics
     accuracy = accuracy_score(all_targets, all_preds)
     precision_macro = precision_score(all_targets, all_preds, average='macro', zero_division=0)
     recall_macro = recall_score(all_targets, all_preds, average='macro', zero_division=0)
     f1_macro = f1_score(all_targets, all_preds, average='macro', zero_division=0)
+
+    # Calculate ROC AUC if applicable
+    roc_auc = None
+    if all_probs.shape[1] > 1:  # Multi-class case
+        try:
+            from sklearn.metrics import roc_auc_score
+            roc_auc = roc_auc_score(all_targets, all_probs[:, 1])
+        except Exception as e:
+            logger.warning(f"Could not calculate ROC AUC: {e}")
 
     # Store metrics
     metrics = {
@@ -419,21 +543,30 @@ def evaluate_deep_model(
         'targets': all_targets
     }
 
+    if roc_auc is not None:
+        metrics['roc_auc'] = roc_auc
+
     # Log metrics
     logger.info(f"{model_name} evaluation metrics:")
     logger.info(f"  Accuracy: {accuracy:.4f}")
     logger.info(f"  Precision (macro): {precision_macro:.4f}")
     logger.info(f"  Recall (macro): {recall_macro:.4f}")
     logger.info(f"  F1 (macro): {f1_macro:.4f}")
+    if roc_auc is not None:
+        logger.info(f"  ROC AUC: {roc_auc:.4f}")
 
     # Log metrics to Weights & Biases
     if wandb_run is not None:
-        log_metrics(wandb_run, {
+        metrics_to_log = {
             f"{model_name}_accuracy": accuracy,
             f"{model_name}_precision_macro": precision_macro,
             f"{model_name}_recall_macro": recall_macro,
             f"{model_name}_f1_macro": f1_macro
-        })
+        }
+        if roc_auc is not None:
+            metrics_to_log[f"{model_name}_roc_auc"] = roc_auc
+
+        log_metrics(wandb_run, metrics_to_log)
 
     return metrics
 

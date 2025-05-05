@@ -22,61 +22,36 @@ from mind.utils.experiment_tracking import log_metrics
 
 logger = logging.getLogger(__name__)
 
-def train_random_forest(
-        X_train: np.ndarray,
-        y_train: np.ndarray,
-        X_val: np.ndarray,
-        y_val: np.ndarray,
-        config: Dict[str, Any],
-        optimize: bool = True,
-        class_weights: Optional[Dict[int, float]] = None
-) -> Tuple[Any, Dict[str, Any]]:
-    """
-    Train a Random Forest model efficiently.
-    """
-    logger.info("Training Random Forest")
+def train_random_forest(X_train, y_train, X_val, y_val, config, optimize=True, class_weights=None, signal_type=None):
+    """Train a Random Forest model for binary classification."""
+    logger.info(f"Training Random Forest for {signal_type if signal_type else 'general'} data")
 
-    if optimize:
-        # Optimize hyperparameters
-        model, best_params = optimize_random_forest(X_train, y_train, config, class_weights)
-        logger.info(f"Optimized Random Forest parameters: {best_params}")
-    else:
-        # Create model with default parameters
-        model = create_random_forest(config)
+    # Create model
+    model = create_random_forest(signal_type, config['experiment'].get('seed', 42))
 
-        # Apply class weights if provided
-        if class_weights is not None:
-            model.class_weight = class_weights
+    # Apply class weights if provided
+    if class_weights is not None:
+        model.class_weight = class_weights
 
-        # Train model
-        model.fit(X_train, y_train.astype(int))
+    # Train model - convert to binary classification
+    model.fit(X_train, y_train.astype(int))
 
     # Evaluate model
     y_pred = model.predict(X_val)
+    y_prob = model.predict_proba(X_val)
 
     # Calculate metrics
-    accuracy = accuracy_score(y_val, y_pred)
-    precision_macro = precision_score(y_val, y_pred, average='macro', zero_division=0)
-    recall_macro = recall_score(y_val, y_pred, average='macro', zero_division=0)
-    f1_macro = f1_score(y_val, y_pred, average='macro', zero_division=0)
-
-    # Log metrics
-    logger.info(f"Random Forest validation metrics:")
-    logger.info(f"  Accuracy: {accuracy:.4f}")
-    logger.info(f"  Precision (macro): {precision_macro:.4f}")
-    logger.info(f"  Recall (macro): {recall_macro:.4f}")
-    logger.info(f"  F1 (macro): {f1_macro:.4f}")
-
-    # Create metrics dictionary
     metrics = {
-        'accuracy': accuracy,
-        'precision_macro': precision_macro,
-        'recall_macro': recall_macro,
-        'f1_macro': f1_macro
+        'accuracy': accuracy_score(y_val, y_pred),
+        'precision_macro': precision_score(y_val, y_pred, average='macro', zero_division=0),
+        'recall_macro': recall_score(y_val, y_pred, average='macro', zero_division=0),
+        'f1_macro': f1_score(y_val, y_pred, average='macro', zero_division=0),
+        'predictions': y_pred,
+        'probabilities': y_prob,
+        'targets': y_val
     }
 
     return model, metrics
-
 
 def train_svm(
         X_train: np.ndarray,
@@ -85,12 +60,11 @@ def train_svm(
         y_val: np.ndarray,
         config: Dict[str, Any],
         optimize: bool = True,
-        class_weights: Optional[Dict[int, float]] = None
+        class_weights: Optional[Dict[int, float]] = None,
+        signal_type: str = None  # Add this parameter
 ) -> Tuple[Any, Dict[str, Any], Optional[Any]]:
-    """
-    Train a Support Vector Machine model efficiently.
-    """
-    logger.info("Training SVM")
+    """Train a Support Vector Machine model efficiently."""
+    logger.info(f"Training SVM for {signal_type if signal_type else 'general'} data")
 
     pca_transformer = None
 
@@ -167,12 +141,11 @@ def train_mlp(
         X_val: np.ndarray,
         y_val: np.ndarray,
         config: Dict[str, Any],
-        optimize: bool = True
+        optimize: bool = True,
+        signal_type: str = None  # Add this parameter
 ) -> Tuple[Any, Dict[str, Any]]:
-    """
-    Train a Multilayer Perceptron model efficiently.
-    """
-    logger.info("Training MLP")
+    """Train a Multilayer Perceptron model efficiently."""
+    logger.info(f"Training MLP for {signal_type if signal_type else 'general'} data")
 
     if optimize:
         # Optimize hyperparameters
@@ -211,13 +184,14 @@ def train_mlp(
 
     return model, metrics
 
+
 def train_all_classical_models(
         data: Dict[str, Any],
         config: Dict[str, Any],
         wandb_run: Any = None
 ) -> Dict[str, Any]:
     """
-    Train all classical machine learning models on all signal types.
+    Train all classical machine learning models on all signal types with enhanced data validation.
 
     Parameters
     ----------
@@ -251,10 +225,78 @@ def train_all_classical_models(
         logger.info(f"Training models for {signal_type} signal")
 
         # Extract data for this signal type
-        X_train = data[f'X_train_{signal_type}']
-        y_train = data[f'y_train_{signal_type}']
-        X_val = data[f'X_val_{signal_type}']
-        y_val = data[f'y_val_{signal_type}']
+        X_train_key = f'X_train_{signal_type}'
+        y_train_key = f'y_train_{signal_type}'
+        X_val_key = f'X_val_{signal_type}'
+        y_val_key = f'y_val_{signal_type}'
+
+        # Check if data exists
+        if X_train_key not in data or y_train_key not in data or X_val_key not in data or y_val_key not in data:
+            logger.error(f"Missing required data keys for {signal_type}")
+            continue
+
+        X_train = data[X_train_key]
+        y_train = data[y_train_key]
+        X_val = data[X_val_key]
+        y_val = data[y_val_key]
+
+        # Validate data types
+        if not isinstance(X_train, np.ndarray):
+            logger.error(f"X_train for {signal_type} is not a numpy array: {type(X_train)}")
+            continue
+        if not isinstance(X_val, np.ndarray):
+            logger.error(f"X_val for {signal_type} is not a numpy array: {type(X_val)}")
+            continue
+        if not isinstance(y_train, np.ndarray):
+            logger.error(f"y_train for {signal_type} is not a numpy array: {type(y_train)}")
+            continue
+        if not isinstance(y_val, np.ndarray):
+            logger.error(f"y_val for {signal_type} is not a numpy array: {type(y_val)}")
+            continue
+
+        # Check for invalid data types (like dictionaries) or NaN values
+        try:
+            # Check for object dtype which could indicate mixed types
+            if X_train.dtype == np.dtype('O'):
+                logger.warning(f"X_train for {signal_type} has dtype 'object', which could contain non-numeric values")
+                # Sample check - examine a few values to determine if there are dictionaries
+                for i in range(min(10, len(X_train))):
+                    for j in range(min(10, X_train.shape[1] if X_train.ndim > 1 else 1)):
+                        idx = (i, j) if X_train.ndim > 1 else i
+                        val = X_train[idx]
+                        if isinstance(val, dict):
+                            logger.error(f"X_train for {signal_type} contains dictionary at index {idx}")
+                            raise ValueError(f"Dictionary found in X_train at index {idx}")
+
+            if X_val.dtype == np.dtype('O'):
+                logger.warning(f"X_val for {signal_type} has dtype 'object', which could contain non-numeric values")
+                # Similar check for X_val
+                for i in range(min(10, len(X_val))):
+                    for j in range(min(10, X_val.shape[1] if X_val.ndim > 1 else 1)):
+                        idx = (i, j) if X_val.ndim > 1 else i
+                        val = X_val[idx]
+                        if isinstance(val, dict):
+                            logger.error(f"X_val for {signal_type} contains dictionary at index {idx}")
+                            raise ValueError(f"Dictionary found in X_val at index {idx}")
+
+            # Check for NaN values
+            if np.isnan(X_train).any():
+                logger.warning(f"X_train for {signal_type} contains NaN values")
+            if np.isnan(X_val).any():
+                logger.warning(f"X_val for {signal_type} contains NaN values")
+
+            # Attempt to convert to float to ensure numeric values
+            X_train_float = X_train.astype(float)
+            X_val_float = X_val.astype(float)
+
+            # Update the data to ensure we're using float arrays
+            X_train = X_train_float
+            X_val = X_val_float
+
+        except Exception as e:
+            logger.error(f"Error validating data for {signal_type}: {e}")
+            logger.error(f"Skipping {signal_type} due to data validation errors")
+            continue
 
         # Get class weights if available
         class_weights = data.get('class_weights', {}).get(signal_type, None)
@@ -264,63 +306,86 @@ def train_all_classical_models(
         n_neurons_key = f'n_{signal_type}_neurons'
         n_neurons = data.get(n_neurons_key, X_train.shape[1] // window_size)
 
-        # Train Random Forest
-        rf_model, rf_metrics = train_random_forest(
-            X_train, y_train, X_val, y_val, config,
-            optimize=True, class_weights=class_weights
-        )
-        results['models'][f"{signal_type}_random_forest"] = rf_model
-        results['metrics'][f"{signal_type}_random_forest"] = rf_metrics
+        # Train Random Forest with proper error handling
+        try:
+            logger.info(f"Training Random Forest for {signal_type} data")
+            rf_model, rf_metrics = train_random_forest(
+                X_train, y_train, X_val, y_val, config,
+                optimize=True, class_weights=class_weights, signal_type=signal_type
+            )
+            results['models'][f"{signal_type}_random_forest"] = rf_model
+            results['metrics'][f"{signal_type}_random_forest"] = rf_metrics
 
-        # Extract and store Random Forest feature importance
-        rf_importance_2d, rf_temporal, rf_neuron = rf_extract_feature_importance(
-            rf_model, window_size, n_neurons
-        )
-        results['feature_importance'][f"{signal_type}_rf"] = {
-            'importance_2d': rf_importance_2d,
-            'temporal_importance': rf_temporal,
-            'neuron_importance': rf_neuron
-        }
+            # Extract and store Random Forest feature importance
+            rf_importance_2d, rf_temporal, rf_neuron = rf_extract_feature_importance(
+                rf_model, window_size, n_neurons
+            )
+            results['feature_importance'][f"{signal_type}_rf"] = {
+                'importance_2d': rf_importance_2d,
+                'temporal_importance': rf_temporal,
+                'neuron_importance': rf_neuron
+            }
+        except Exception as e:
+            logger.error(f"Error training Random Forest for {signal_type}: {e}")
 
-        # Train SVM
-        svm_model, svm_metrics, pca_transformer = train_svm(
-            X_train, y_train, X_val, y_val, config,
-            optimize=True, class_weights=class_weights
-        )
-        results['models'][f"{signal_type}_svm"] = svm_model
-        results['metrics'][f"{signal_type}_svm"] = svm_metrics
-        if pca_transformer is not None:
-            results['models'][f"{signal_type}_svm_pca"] = pca_transformer
+        # Train SVM with proper error handling
+        try:
+            logger.info(f"Training SVM for {signal_type} data")
+            svm_model, svm_metrics, pca_transformer = train_svm(
+                X_train, y_train, X_val, y_val, config,
+                optimize=True, class_weights=class_weights, signal_type=signal_type
+            )
+            results['models'][f"{signal_type}_svm"] = svm_model
+            results['metrics'][f"{signal_type}_svm"] = svm_metrics
+            if pca_transformer is not None:
+                results['models'][f"{signal_type}_svm_pca"] = pca_transformer
+        except Exception as e:
+            logger.error(f"Error training SVM for {signal_type}: {e}")
 
-        # Train MLP
-        mlp_model, mlp_metrics = train_mlp(
-            X_train, y_train, X_val, y_val, config, optimize=True
-        )
-        results['models'][f"{signal_type}_mlp"] = mlp_model
-        results['metrics'][f"{signal_type}_mlp"] = mlp_metrics
+        # Train MLP with proper error handling
+        try:
+            logger.info(f"Training MLP for {signal_type} data")
+            mlp_model, mlp_metrics = train_mlp(
+                X_train, y_train, X_val, y_val, config, optimize=True, signal_type=signal_type
+            )
+            results['models'][f"{signal_type}_mlp"] = mlp_model
+            results['metrics'][f"{signal_type}_mlp"] = mlp_metrics
 
-        # Extract and store MLP feature importance
-        mlp_importance_2d, mlp_temporal, mlp_neuron = mlp_extract_feature_importance(
-            mlp_model, window_size, n_neurons
-        )
-        results['feature_importance'][f"{signal_type}_mlp"] = {
-            'importance_2d': mlp_importance_2d,
-            'temporal_importance': mlp_temporal,
-            'neuron_importance': mlp_neuron
-        }
+            # Extract and store MLP feature importance
+            mlp_importance_2d, mlp_temporal, mlp_neuron = mlp_extract_feature_importance(
+                mlp_model, window_size, n_neurons
+            )
+            results['feature_importance'][f"{signal_type}_mlp"] = {
+                'importance_2d': mlp_importance_2d,
+                'temporal_importance': mlp_temporal,
+                'neuron_importance': mlp_neuron
+            }
+        except Exception as e:
+            logger.error(f"Error training MLP for {signal_type}: {e}")
 
         # Log metrics to Weights & Biases
-        if wandb_run is not None:
-            log_metrics(wandb_run, {
-                f"{signal_type}_random_forest_accuracy": rf_metrics['accuracy'],
-                f"{signal_type}_random_forest_f1_macro": rf_metrics['f1_macro'],
-                f"{signal_type}_svm_accuracy": svm_metrics['accuracy'],
-                f"{signal_type}_svm_f1_macro": svm_metrics['f1_macro'],
-                f"{signal_type}_mlp_accuracy": mlp_metrics['accuracy'],
-                f"{signal_type}_mlp_f1_macro": mlp_metrics['f1_macro']
-            })
+        if wandb_run is not None and f"{signal_type}_random_forest" in results['metrics']:
+            metrics_to_log = {}
+            if f"{signal_type}_random_forest" in results['metrics']:
+                rf_metrics = results['metrics'][f"{signal_type}_random_forest"]
+                metrics_to_log[f"{signal_type}_random_forest_accuracy"] = rf_metrics['accuracy']
+                metrics_to_log[f"{signal_type}_random_forest_f1_macro"] = rf_metrics['f1_macro']
+
+            if f"{signal_type}_svm" in results['metrics']:
+                svm_metrics = results['metrics'][f"{signal_type}_svm"]
+                metrics_to_log[f"{signal_type}_svm_accuracy"] = svm_metrics['accuracy']
+                metrics_to_log[f"{signal_type}_svm_f1_macro"] = svm_metrics['f1_macro']
+
+            if f"{signal_type}_mlp" in results['metrics']:
+                mlp_metrics = results['metrics'][f"{signal_type}_mlp"]
+                metrics_to_log[f"{signal_type}_mlp_accuracy"] = mlp_metrics['accuracy']
+                metrics_to_log[f"{signal_type}_mlp_f1_macro"] = mlp_metrics['f1_macro']
+
+            if metrics_to_log:
+                log_metrics(wandb_run, metrics_to_log)
 
     return results
+
 
 
 def test_classical_models(

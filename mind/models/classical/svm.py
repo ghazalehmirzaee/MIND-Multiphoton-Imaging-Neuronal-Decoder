@@ -1,109 +1,124 @@
 import numpy as np
-from sklearn.svm import SVC
-from sklearn.model_selection import RandomizedSearchCV
+from sklearn.svm import SVC, LinearSVC
 from sklearn.decomposition import PCA
-from typing import Dict, Any, Tuple, List, Optional
+from typing import Dict, Any, Tuple, Optional
 import logging
 
 logger = logging.getLogger(__name__)
 
-
-def create_svm(config: Dict[str, Any]) -> SVC:
+def create_svm(
+        signal_type: str = None,
+        n_features: int = None,
+        random_state: int = 42
+) -> Tuple[SVC, Optional[PCA]]:
     """
-    Create a Support Vector Machine classifier with the specified configuration.
+    Create an efficient SVM classifier optimized for the signal type.
+
+    Parameters
+    ----------
+    signal_type : str, optional
+        Signal type to optimize for ('calcium', 'deltaf', or 'deconv')
+    n_features : int, optional
+        Number of features to determine PCA components
+    random_state : int, optional
+        Random state for reproducibility
+
+    Returns
+    -------
+    Tuple[SVC, Optional[PCA]]
+        Optimized SVM model and PCA transformer (if used)
     """
-    svm_params = config['models']['classical']['svm']
+    # Base parameters
+    base_params = {
+        'kernel': 'rbf',
+        'C': 1.0,
+        'gamma': 'scale',
+        'class_weight': 'balanced',
+        'probability': True,
+        'cache_size': 200,
+        'random_state': random_state,
+        'verbose': 0,
+    }
 
-    model = SVC(
-        kernel=svm_params.get('kernel', 'rbf'),
-        C=svm_params.get('C', 1.0),
-        gamma=svm_params.get('gamma', 'scale'),
-        class_weight=svm_params.get('class_weight', 'balanced'),
-        probability=svm_params.get('probability', True),
-        random_state=config['experiment'].get('seed', 42)
-    )
+    # Create SVM model
+    model = SVC(**base_params)
 
-    return model
+    # Apply PCA for dimensionality reduction
+    pca = None
+    if n_features is not None and n_features > 100:
+        n_components = min(100, int(n_features * 0.5))
+        pca = PCA(n_components=n_components, random_state=random_state)
+
+    return model, pca
 
 
 def optimize_svm(
         X_train: np.ndarray,
         y_train: np.ndarray,
-        config: Dict[str, Any],
-        class_weights: Optional[Dict[int, float]] = None
-) -> Tuple[SVC, Dict[str, Any], Optional[PCA]]:
+        X_val: np.ndarray,
+        y_val: np.ndarray,
+        signal_type: str = None,
+        random_state: int = 42
+) -> Tuple[Any, Dict[str, Any], Optional[PCA]]:
     """
-    Optimize SVM hyperparameters using randomized search, with efficient PCA.
+    Train an efficient SVM model.
+
+    Parameters
+    ----------
+    X_train : np.ndarray
+        Training features
+    y_train : np.ndarray
+        Training labels
+    X_val : np.ndarray
+        Validation features
+    y_val : np.ndarray
+        Validation labels
+    signal_type : str, optional
+        Signal type to optimize for
+    random_state : int, optional
+        Random state for reproducibility
+
+    Returns
+    -------
+    Tuple[Any, Dict[str, Any], Optional[PCA]]
+        Trained model, evaluation metrics, and PCA transformer (if used)
     """
-    logger.info("Optimizing SVM hyperparameters")
+    # Create model with PCA if needed
+    model, pca = create_svm(signal_type, X_train.shape[1], random_state)
 
-    # Check if PCA should be applied
-    svm_params = config['models']['classical']['svm']
-    use_pca = svm_params.get('pca', True)
-    pca_transformer = None
-
-    # Apply PCA if requested
-    if use_pca:
-        n_features = X_train.shape[1]
-
-        # Determine optimal number of components efficiently
-        pca_components = svm_params.get('pca_components', 0.95)
-        if isinstance(pca_components, float) and pca_components <= 1.0:
-            # Use explained variance ratio
-            n_components = pca_components
-        else:
-            # Use specific number of components (capped at 100 for efficiency)
-            n_components = min(n_features, int(pca_components), 100)
-
-        logger.info(f"Applying PCA to reduce dimensions from {n_features} to {n_components}")
-        pca_transformer = PCA(n_components=n_components, random_state=config['experiment'].get('seed', 42))
-        X_train_pca = pca_transformer.fit_transform(X_train)
-
-        # Log explained variance
-        explained_variance = np.sum(pca_transformer.explained_variance_ratio_)
-        logger.info(f"PCA explained variance ratio: {explained_variance:.4f}")
-
-        # Use transformed data for hyperparameter optimization
-        X_train_opt = X_train_pca
+    # Apply PCA if needed
+    if pca is not None:
+        X_train_transformed = pca.fit_transform(X_train)
+        X_val_transformed = pca.transform(X_val)
     else:
-        X_train_opt = X_train
+        X_train_transformed = X_train
+        X_val_transformed = X_val
 
-    # Define efficient parameter distribution for randomized search
-    param_dist = {
-        'C': [0.1, 1.0, 10.0],
-        'gamma': ['scale', 'auto', 0.01, 0.1],
-        'kernel': ['rbf', 'linear'],
-        'probability': [True]
+    # Train model
+    model.fit(X_train_transformed, y_train.astype(int))
+
+    # Evaluate model
+    from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+
+    y_pred = model.predict(X_val_transformed)
+
+    try:
+        y_prob = model.predict_proba(X_val_transformed)
+    except:
+        y_prob = None
+
+    # Calculate metrics
+    metrics = {
+        'accuracy': accuracy_score(y_val, y_pred),
+        'precision_macro': precision_score(y_val, y_pred, average='macro', zero_division=0),
+        'recall_macro': recall_score(y_val, y_pred, average='macro', zero_division=0),
+        'f1_macro': f1_score(y_val, y_pred, average='macro', zero_division=0),
+        'predictions': y_pred,
+        'targets': y_val
     }
 
-    # If class_weights provided, include them
-    if class_weights:
-        param_dist['class_weight'] = ['balanced', class_weights]
-    else:
-        param_dist['class_weight'] = ['balanced']
+    if y_prob is not None:
+        metrics['probabilities'] = y_prob
 
-    # Initialize SVM
-    svm = SVC(random_state=config['experiment'].get('seed', 42))
-
-    # Randomized search with cross-validation using efficient parameters
-    random_search = RandomizedSearchCV(
-        estimator=svm,
-        param_distributions=param_dist,
-        n_iter=10,  # Reduced number of parameter settings
-        cv=3,
-        n_jobs=-1,
-        scoring='f1_weighted',
-        random_state=config['experiment'].get('seed', 42),
-        verbose=0
-    )
-
-    # Fit model
-    logger.info("Performing randomized search for SVM")
-    random_search.fit(X_train_opt, y_train.astype(int))
-
-    # Get best parameters
-    best_params = random_search.best_params_
-    logger.info(f"Best parameters: {best_params}")
-
-    return random_search.best_estimator_, best_params, pca_transformer
+    return model, metrics, pca
 

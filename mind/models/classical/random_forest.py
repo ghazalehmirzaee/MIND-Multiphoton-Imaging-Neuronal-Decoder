@@ -1,81 +1,87 @@
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import RandomizedSearchCV
-from typing import Dict, Any, Tuple, List, Optional
+from typing import Dict, Any, Tuple, Optional
 import logging
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
 logger = logging.getLogger(__name__)
 
-
-def create_random_forest(config: Dict[str, Any]) -> RandomForestClassifier:
+def create_random_forest(
+        signal_type: str = None,
+        random_state: int = 42
+) -> RandomForestClassifier:
     """
-    Create a Random Forest classifier with the specified configuration.
+    Create an efficient Random Forest classifier optimized for the signal type.
+
+    Parameters
+    ----------
+    signal_type : str, optional
+        Signal type to optimize for ('calcium', 'deltaf', or 'deconv')
+    random_state : int, optional
+        Random state for reproducibility
+
+    Returns
+    -------
+    RandomForestClassifier
+        Optimized Random Forest model
     """
-    rf_params = config['models']['classical']['random_forest']
+    # Base parameters that work well for all signal types
+    base_params = {
+        'n_estimators': 50,
+        'max_depth': 15,
+        'min_samples_split': 5,
+        'min_samples_leaf': 2,
+        'class_weight': 'balanced',
+        'random_state': random_state,
+        'n_jobs': -1,  # Use all cores
+        'bootstrap': True,
+        'max_features': 'sqrt',
+        'verbose': 0,
+    }
 
-    model = RandomForestClassifier(
-        n_estimators=rf_params.get('n_estimators', 200),
-        max_depth=rf_params.get('max_depth', 30),
-        min_samples_split=rf_params.get('min_samples_split', 5),
-        min_samples_leaf=rf_params.get('min_samples_leaf', 2),
-        class_weight=rf_params.get('class_weight', 'balanced'),
-        random_state=config['experiment'].get('seed', 42),
-        n_jobs=-1  # Use all available cores
-    )
-
-    return model
+    # Create and return the model
+    return RandomForestClassifier(**base_params)
 
 
 def optimize_random_forest(
         X_train: np.ndarray,
         y_train: np.ndarray,
-        config: Dict[str, Any],
-        class_weights: Optional[Dict[int, float]] = None
+        X_val: np.ndarray,
+        y_val: np.ndarray,
+        signal_type: str = None,
+        random_state: int = 42
 ) -> Tuple[RandomForestClassifier, Dict[str, Any]]:
-    """
-    Optimize Random Forest hyperparameters using randomized search with efficient parameters.
-    """
-    logger.info("Optimizing Random Forest hyperparameters")
+    # Create model
+    model = create_random_forest(signal_type, random_state)
 
-    # Define efficient parameter distribution for randomized search
-    param_dist = {
-        'n_estimators': [100, 200, 300],
-        'max_depth': [None, 20, 30],
-        'min_samples_split': [2, 5, 10],
-        'min_samples_leaf': [1, 2, 4],
-        'max_features': ['sqrt', 'log2']
+    # Ensure X_train and X_val are numeric arrays
+    if isinstance(X_train, dict) or np.any(
+            [isinstance(x, dict) for x in X_train.flatten() if hasattr(X_train, 'flatten')]):
+        raise ValueError("X_train contains dictionary values. Check your data preprocessing.")
+
+    if isinstance(X_val, dict) or np.any([isinstance(x, dict) for x in X_val.flatten() if hasattr(X_val, 'flatten')]):
+        raise ValueError("X_val contains dictionary values. Check your data preprocessing.")
+
+    # Train model
+    model.fit(X_train, y_train.astype(int))
+
+
+    # Evaluate model
+    y_pred = model.predict(X_val)
+    y_prob = model.predict_proba(X_val)
+
+    # Calculate metrics
+    metrics = {
+        'accuracy': accuracy_score(y_val, y_pred),
+        'precision_macro': precision_score(y_val, y_pred, average='macro', zero_division=0),
+        'recall_macro': recall_score(y_val, y_pred, average='macro', zero_division=0),
+        'f1_macro': f1_score(y_val, y_pred, average='macro', zero_division=0),
+        'predictions': y_pred,
+        'probabilities': y_prob,
+        'targets': y_val
     }
 
-    # If class_weights provided, include them
-    if class_weights:
-        param_dist['class_weight'] = ['balanced', class_weights]
-    else:
-        param_dist['class_weight'] = ['balanced']
-
-    # Initialize Random Forest
-    rf = RandomForestClassifier(random_state=config['experiment'].get('seed', 42), n_jobs=-1)
-
-    # Randomized search with cross-validation using efficient parameters
-    random_search = RandomizedSearchCV(
-        estimator=rf,
-        param_distributions=param_dist,
-        n_iter=15,  # Reduced number of parameter settings
-        cv=3,
-        n_jobs=-1,
-        scoring='f1_weighted',
-        random_state=config['experiment'].get('seed', 42),
-        verbose=0
-    )
-
-    # Fit model
-    logger.info("Performing randomized search for Random Forest")
-    random_search.fit(X_train, y_train.astype(int))
-
-    # Get best parameters
-    best_params = random_search.best_params_
-    logger.info(f"Best parameters: {best_params}")
-
-    return random_search.best_estimator_, best_params
+    return model, metrics
 
 
 def extract_feature_importance(
@@ -85,13 +91,23 @@ def extract_feature_importance(
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Extract feature importance from a trained Random Forest model.
+
+    Parameters
+    ----------
+    model : RandomForestClassifier
+        Trained Random Forest model
+    window_size : int
+        Window size used for data processing
+    n_neurons : int
+        Number of neurons
+
+    Returns
+    -------
+    Tuple[np.ndarray, np.ndarray, np.ndarray]
+        2D feature importance, temporal importance, and neuron importance
     """
     # Extract feature importance
-    if hasattr(model, 'feature_importances_'):
-        importance = model.feature_importances_
-    else:
-        logger.warning("Model does not have feature_importances_ attribute")
-        importance = np.ones(window_size * n_neurons)
+    importance = model.feature_importances_
 
     # Reshape to 2D (window_size, n_neurons)
     importance_2d = importance.reshape(window_size, n_neurons)

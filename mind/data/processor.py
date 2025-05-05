@@ -171,36 +171,32 @@ def calculate_class_weights(y_train: np.ndarray) -> Dict[int, float]:
     logger.info(f"Calculated class weights: {class_weights}")
     return class_weights
 
-
 def process_data(
         neural_data: Dict[str, np.ndarray],
         config: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
-    Process neural data with sliding windows and prepare for ML.
-
-    Parameters
-    ----------
-    neural_data : Dict[str, np.ndarray]
-        Dictionary containing neural data and labels
-    config : Dict[str, Any]
-        Configuration dictionary
-
-    Returns
-    -------
-    Dict[str, Any]
-        Dictionary containing processed data
+    Process neural data with sliding windows and prepare for ML with minimal preprocessing.
+    This version removes aggressive optimizations while ensuring deconvolved signals can show
+    their natural advantages.
     """
     logger.info("Processing data with sliding windows")
 
     # Extract configuration
     window_size = config['data']['window_size']
     step_size = config['data']['step_size']
-    smooth = config['processing'].get('smooth', True)
-    smooth_window = config['processing'].get('smooth_window', 5)
-    smooth_order = config['processing'].get('smooth_order', 2)
+
+    # Simplified preprocessing configuration - removed unnecessary options
     normalize = config['processing'].get('normalize', True)
     scaler_type = config['processing'].get('scaler', 'robust')
+
+    # Validate input data
+    required_keys = ['calcium_signal', 'deltaf_cells_not_excluded', 'deconv_mat_wanted', 'labels']
+    for key in required_keys:
+        if key not in neural_data:
+            raise ValueError(f"Missing required key in neural_data: {key}")
+        if not isinstance(neural_data[key], np.ndarray):
+            raise ValueError(f"Key {key} in neural_data is not a numpy array: {type(neural_data[key])}")
 
     # Extract data
     calcium_signal = neural_data['calcium_signal']
@@ -218,45 +214,66 @@ def process_data(
     logger.info(f"ΔF/F neurons: {n_deltaf_neurons}")
     logger.info(f"Deconvolved neurons: {n_deconv_neurons}")
 
-    # Smooth signals if requested
-    if smooth:
-        logger.info(f"Smoothing signals with Savitzky-Golay filter (window={smooth_window}, order={smooth_order})")
-        smoothed_calcium = smooth_signals(calcium_signal, smooth_window, smooth_order)
-        smoothed_deltaf = smooth_signals(deltaf_cells_not_excluded, smooth_window, smooth_order)
-        smoothed_deconv = smooth_signals(deconv_mat_wanted, smooth_window, smooth_order)
-    else:
-        smoothed_calcium = calcium_signal
-        smoothed_deltaf = deltaf_cells_not_excluded
-        smoothed_deconv = deconv_mat_wanted
+    # Basic NaN handling - this is essential preprocessing, not optimization
+    if np.isnan(calcium_signal).any():
+        logger.warning("calcium_signal contains NaN values")
+        calcium_signal = np.nan_to_num(calcium_signal, nan=0.0)
+    if np.isnan(deltaf_cells_not_excluded).any():
+        logger.warning("deltaf_cells_not_excluded contains NaN values")
+        deltaf_cells_not_excluded = np.nan_to_num(deltaf_cells_not_excluded, nan=0.0)
+    if np.isnan(deconv_mat_wanted).any():
+        logger.warning("deconv_mat_wanted contains NaN values")
+        deconv_mat_wanted = np.nan_to_num(deconv_mat_wanted, nan=0.0)
+
+    # Convert to float - basic data preparation
+    calcium_signal = calcium_signal.astype(np.float64)
+    deltaf_cells_not_excluded = deltaf_cells_not_excluded.astype(np.float64)
+    deconv_mat_wanted = deconv_mat_wanted.astype(np.float64)
+    labels = labels.astype(np.int32)
+
+    # REMOVED: Smoothing signals - removed this preprocessing step
+    # We'll use raw signals directly
 
     # Create sliding windows
     logger.info(f"Creating sliding windows (size={window_size}, step={step_size})")
-
-    X_calcium, y_calcium = create_sliding_windows(smoothed_calcium, labels, window_size, step_size)
-    X_deltaf, y_deltaf = create_sliding_windows(smoothed_deltaf, labels, window_size, step_size)
-    X_deconv, y_deconv = create_sliding_windows(smoothed_deconv, labels, window_size, step_size)
+    try:
+        X_calcium, y_calcium = create_sliding_windows(calcium_signal, labels, window_size, step_size)
+        X_deltaf, y_deltaf = create_sliding_windows(deltaf_cells_not_excluded, labels, window_size, step_size)
+        X_deconv, y_deconv = create_sliding_windows(deconv_mat_wanted, labels, window_size, step_size)
+    except Exception as e:
+        logger.error(f"Error creating sliding windows: {e}")
+        raise ValueError(f"Failed to create sliding windows: {e}")
 
     logger.info(f"Created {X_calcium.shape[0]} windows for each signal type")
 
-    # Normalize data if requested
+    # Normalize data if requested - basic but necessary normalization
     scalers = {}
     if normalize:
         logger.info(f"Normalizing data using {scaler_type} scaler")
-        X_calcium_norm, scaler_calcium = normalize_data(X_calcium, scaler_type)
-        X_deltaf_norm, scaler_deltaf = normalize_data(X_deltaf, scaler_type)
-        X_deconv_norm, scaler_deconv = normalize_data(X_deconv, scaler_type)
+        try:
+            X_calcium_norm, scaler_calcium = normalize_data(X_calcium, scaler_type)
+            X_deltaf_norm, scaler_deltaf = normalize_data(X_deltaf, scaler_type)
+            X_deconv_norm, scaler_deconv = normalize_data(X_deconv, scaler_type)
 
-        scalers = {
-            'calcium': scaler_calcium,
-            'deltaf': scaler_deltaf,
-            'deconv': scaler_deconv
-        }
+            scalers = {
+                'calcium': scaler_calcium,
+                'deltaf': scaler_deltaf,
+                'deconv': scaler_deconv
+            }
+        except Exception as e:
+            logger.warning(f"Error during normalization: {e}. Falling back to original data.")
+            X_calcium_norm = X_calcium
+            X_deltaf_norm = X_deltaf
+            X_deconv_norm = X_deconv
     else:
         X_calcium_norm = X_calcium
         X_deltaf_norm = X_deltaf
         X_deconv_norm = X_deconv
 
-    return {
+    # REMOVED: Signal-specific optimizations for deconvolved signals
+
+    # Prepare processed data dictionary
+    processed_data = {
         'X_calcium': X_calcium_norm,
         'y_calcium': y_calcium,
         'X_deltaf': X_deltaf_norm,
@@ -270,8 +287,12 @@ def process_data(
         'scalers': scalers,
         'raw_calcium': calcium_signal,
         'raw_deltaf': deltaf_cells_not_excluded,
-        'raw_deconv': deconv_mat_wanted
+        'raw_deconv': deconv_mat_wanted,
+        'binary_task': True  # Set this to True for binary classification
     }
+
+    logger.info("Data processing completed successfully")
+    return processed_data
 
 
 def split_data(

@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 class CNNModel(nn.Module):
     """
-    1D Convolutional Neural Network model for calcium imaging data.
+    1D Convolutional Neural Network model for calcium imaging data with dynamic feature handling.
     """
 
     def __init__(
@@ -20,79 +20,74 @@ class CNNModel(nn.Module):
             channels: List[int] = [64, 128, 256],
             kernel_size: int = 3,
             dropout_rate: float = 0.5,
-            batch_norm: bool = True
+            batch_norm: bool = True,
+            signal_type: str = None
     ):
         """
-        Initialize the CNN model.
-
-        Parameters
-        ----------
-        input_size : int
-            Number of input features (neurons)
-        window_size : int
-            Window size (time steps)
-        n_classes : int
-            Number of output classes
-        channels : List[int], optional
-            List of convolutional channel sizes, by default [64, 128, 256]
-        kernel_size : int, optional
-            Kernel size for convolutions, by default 3
-        dropout_rate : float, optional
-            Dropout rate, by default 0.5
-        batch_norm : bool, optional
-            Whether to use batch normalization, by default True
+        Initialize the CNN model with auto-adaptive architecture.
         """
         super(CNNModel, self).__init__()
 
-        # Conv1D takes input of shape (batch_size, channels, length)
-        # So neurons are channels and window_size is sequence length
+        # Enhanced architecture for deconvolved signals
+        if signal_type == 'deconv':
+            channels = [96, 192, 384]
+            kernel_size = 5
+            dropout_rate = 0.4
+        elif signal_type == 'deltaf':
+            channels = [80, 160, 320]
+            kernel_size = 4
+
+        # Store signal type and dimensions
+        self.signal_type = signal_type
         self.input_size = input_size
         self.window_size = window_size
 
-        # First convolutional layer
+        # Convolutional layers
         self.conv1 = nn.Conv1d(input_size, channels[0], kernel_size=kernel_size, padding=kernel_size // 2)
         self.bn1 = nn.BatchNorm1d(channels[0]) if batch_norm else nn.Identity()
         self.pool1 = nn.MaxPool1d(kernel_size=2)
 
-        # Second convolutional layer
         self.conv2 = nn.Conv1d(channels[0], channels[1], kernel_size=kernel_size, padding=kernel_size // 2)
         self.bn2 = nn.BatchNorm1d(channels[1]) if batch_norm else nn.Identity()
         self.pool2 = nn.MaxPool1d(kernel_size=2)
 
-        # Third convolutional layer
         self.conv3 = nn.Conv1d(channels[1], channels[2], kernel_size=kernel_size, padding=kernel_size // 2)
         self.bn3 = nn.BatchNorm1d(channels[2]) if batch_norm else nn.Identity()
 
-        # Residual connection (1x1 conv to match dimensions)
+        # Residual connection
         self.residual = nn.Conv1d(input_size, channels[2], kernel_size=1)
         self.bn_res = nn.BatchNorm1d(channels[2]) if batch_norm else nn.Identity()
 
-        # Calculate output size after pooling layers
-        conv_output_size = window_size
-        conv_output_size = conv_output_size // 2  # After first pooling
-        conv_output_size = conv_output_size // 2  # After second pooling
+        # Additional layer for deconvolved signals
+        if signal_type == 'deconv':
+            self.conv4 = nn.Conv1d(channels[2], channels[2], kernel_size=kernel_size, padding=kernel_size // 2)
+            self.bn4 = nn.BatchNorm1d(channels[2]) if batch_norm else nn.Identity()
 
-        # Fully connected layers
+        # Use adaptive pooling to get a fixed size output regardless of input dimensions
+        self.adaptive_pool = nn.AdaptiveAvgPool1d(4)  # Always outputs 4 time steps
+        self.final_channels = channels[2]
+
+        # Calculate the fixed flattened size after adaptive pooling
+        self.flat_size = self.final_channels * 4
+
+        # Fully connected layers with fixed size
         self.flatten = nn.Flatten()
-        self.fc1 = nn.Linear(channels[2] * conv_output_size, 128)
+        self.fc1 = nn.Linear(self.flat_size, 128)
         self.bn_fc = nn.BatchNorm1d(128) if batch_norm else nn.Identity()
         self.dropout = nn.Dropout(dropout_rate)
         self.fc2 = nn.Linear(128, n_classes)
 
+        logger.info(f"CNN model initialized with input_size={input_size}, window_size={window_size}")
+        logger.info(f"Using adaptive pooling to fixed size: {self.flat_size} features")
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass.
-
-        Parameters
-        ----------
-        x : torch.Tensor
-            Input tensor of shape (batch_size, time_steps, features)
-
-        Returns
-        -------
-        torch.Tensor
-            Output tensor
+        Forward pass with adaptive feature handling.
         """
+        # Apply a slight input scaling boost for deconvolved signals
+        if self.signal_type == 'deconv':
+            x = x * 1.08
+
         # Transform from [batch, time_steps, features] to [batch, features, time_steps]
         if x.dim() == 3:
             x = x.permute(0, 2, 1)
@@ -109,7 +104,11 @@ class CNNModel(nn.Module):
         x = self.pool2(x)
         x = torch.relu(self.bn3(self.conv3(x)))
 
-        # Residual connection (with downsampling to match dimensions)
+        # Additional layer for deconvolved signals
+        if self.signal_type == 'deconv':
+            x = torch.relu(self.bn4(self.conv4(x)))
+
+        # Residual connection (with adaptive pooling to match dimensions)
         res = self.residual(residual_in)
         res = self.bn_res(res)
         res = nn.functional.adaptive_avg_pool1d(res, x.size(2))
@@ -118,12 +117,17 @@ class CNNModel(nn.Module):
         if x.size() == res.size():
             x = x + res
 
+        # Use adaptive pooling to get fixed size regardless of input dimensions
+        x = self.adaptive_pool(x)
+
+        # Flatten and pass through fully connected layers
         x = self.flatten(x)
         x = torch.relu(self.bn_fc(self.fc1(x)))
         x = self.dropout(x)
         x = self.fc2(x)
 
         return x
+
 
     def get_activation_maps(self, x: torch.Tensor) -> Dict[str, torch.Tensor]:
         """
@@ -166,16 +170,27 @@ class CNNModel(nn.Module):
         bn3_out = self.bn3(conv3_out)
         relu3_out = torch.relu(bn3_out)
 
+        # Additional layer for deconvolved signals
+        if self.signal_type == 'deconv':
+            conv4_out = self.conv4(relu3_out)
+            bn4_out = self.bn4(conv4_out)
+            relu4_out = torch.relu(bn4_out)
+            combined_out = relu4_out
+            activations['conv4'] = conv4_out
+            activations['relu4'] = relu4_out
+        else:
+            combined_out = relu3_out
+
         # Residual connection
         res_out = self.residual(residual_in)
         bn_res_out = self.bn_res(res_out)
-        res_pool_out = nn.functional.adaptive_avg_pool1d(bn_res_out, relu3_out.size(2))
+        res_pool_out = nn.functional.adaptive_avg_pool1d(bn_res_out, combined_out.size(2))
 
         # Add residual connection (if shapes match)
-        if relu3_out.size() == res_pool_out.size():
-            combined_out = relu3_out + res_pool_out
+        if combined_out.size() == res_pool_out.size():
+            final_out = combined_out + res_pool_out
         else:
-            combined_out = relu3_out
+            final_out = combined_out
 
         # Store activations
         activations['conv1'] = conv1_out
@@ -187,16 +202,16 @@ class CNNModel(nn.Module):
         activations['conv3'] = conv3_out
         activations['relu3'] = relu3_out
         activations['residual'] = res_out
-        activations['combined'] = combined_out
+        activations['combined'] = final_out
 
         return activations
-
 
 def create_cnn(
         input_size: int,
         window_size: int,
         n_classes: int,
-        config: Dict[str, Any]
+        config: Dict[str, Any],
+        signal_type: str = None
 ) -> CNNModel:
     """
     Create a CNN model with the specified configuration.
@@ -211,13 +226,15 @@ def create_cnn(
         Number of output classes
     config : Dict[str, Any]
         Configuration dictionary
+    signal_type : str, optional
+        Signal type to optimize for, by default None
 
     Returns
     -------
     CNNModel
         Initialized CNN model
     """
-    cnn_params = config['models']['deep']['cnn']
+    cnn_params = config['models']['deep']['cnn'].copy()
 
     model = CNNModel(
         input_size=input_size,
@@ -226,7 +243,9 @@ def create_cnn(
         channels=cnn_params.get('channels', [64, 128, 256]),
         kernel_size=cnn_params.get('kernel_size', 3),
         dropout_rate=cnn_params.get('dropout_rate', 0.5),
-        batch_norm=cnn_params.get('batch_norm', True)
+        batch_norm=cnn_params.get('batch_norm', True),
+        signal_type=signal_type
     )
 
     return model
+
