@@ -112,7 +112,6 @@ def train_random_forest(
 
     return model, metrics
 
-
 def train_svm(
         X_train: np.ndarray,
         y_train: np.ndarray,
@@ -120,12 +119,11 @@ def train_svm(
         y_val: np.ndarray,
         config: Dict[str, Any],
         optimize: bool = True,
-        class_weights: Optional[Dict[int, float]] = None
+        class_weights: Optional[Dict[int, float]] = None,
+        signal_type: str = None  # Add this parameter
 ) -> Tuple[Any, Dict[str, Any], Optional[Any]]:
-    """
-    Train a Support Vector Machine model efficiently.
-    """
-    logger.info("Training SVM")
+    """Train a Support Vector Machine model efficiently."""
+    logger.info(f"Training SVM for {signal_type if signal_type else 'general'} data")
 
     pca_transformer = None
 
@@ -202,12 +200,11 @@ def train_mlp(
         X_val: np.ndarray,
         y_val: np.ndarray,
         config: Dict[str, Any],
-        optimize: bool = True
+        optimize: bool = True,
+        signal_type: str = None  # Add this parameter
 ) -> Tuple[Any, Dict[str, Any]]:
-    """
-    Train a Multilayer Perceptron model efficiently.
-    """
-    logger.info("Training MLP")
+    """Train a Multilayer Perceptron model efficiently."""
+    logger.info(f"Training MLP for {signal_type if signal_type else 'general'} data")
 
     if optimize:
         # Optimize hyperparameters
