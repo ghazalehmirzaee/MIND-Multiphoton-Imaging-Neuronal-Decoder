@@ -172,12 +172,12 @@ def plot_model_comparison(
     return fig
 
 
-def plot_confusion_matrices(
+def plot_binary_confusion_matrices(
         results: Dict[str, Dict[str, Dict[str, Any]]],
         output_dir: Optional[str] = None
-) -> Dict[str, plt.Figure]:
+) -> plt.Figure:
     """
-    Plot confusion matrices for each model and signal type.
+    Create grid of binary confusion matrices with percentages.
 
     Parameters
     ----------
@@ -188,31 +188,31 @@ def plot_confusion_matrices(
 
     Returns
     -------
-    Dict[str, plt.Figure]
-        Dictionary containing confusion matrix figures
+    plt.Figure
+        Figure containing confusion matrices grid
     """
-    # Initialize figures dictionary
-    figures = {}
-
-    # Define signal types and model types
     signal_types = ['calcium', 'deltaf', 'deconv']
     model_types = ['random_forest', 'svm', 'mlp', 'fcnn', 'cnn']
+    class_names = ['No footstep', 'Contralateral']
 
-    # Define class names
-    class_names = ['No footstep', 'Contralateral', 'Ipsilateral']
+    # Create 5×3 grid (models × signals)
+    fig, axes = plt.subplots(5, 3, figsize=(18, 25))
+    fig.suptitle('Binary Classification Confusion Matrices', fontsize=16)
 
-    # Create figure for each signal type and model type
-    for signal_type in signal_types:
-        if signal_type not in results:
-            logger.warning(f"Results for signal type {signal_type} not found")
-            continue
+    # Set column titles (signal types)
+    for i, signal_type in enumerate(signal_types):
+        axes[0, i].set_title(f'{signal_type.capitalize()} Signal', fontsize=14)
 
-        for model_type in model_types:
-            if model_type not in results[signal_type]:
-                logger.warning(f"Results for model type {model_type} not found in {signal_type}")
+    # Set row titles (model types)
+    for i, model_type in enumerate(model_types):
+        axes[i, 0].set_ylabel(model_type.upper(), fontsize=14)
+
+    for i, model_type in enumerate(model_types):
+        for j, signal_type in enumerate(signal_types):
+            if signal_type not in results or model_type not in results[signal_type]:
+                logger.warning(f"Results for {signal_type}_{model_type} not found")
                 continue
 
-            # Extract predictions and targets
             metrics = results[signal_type][model_type]
             if 'predictions' not in metrics or 'targets' not in metrics:
                 logger.warning(f"Predictions or targets not found in {signal_type}_{model_type}")
@@ -224,31 +224,38 @@ def plot_confusion_matrices(
             # Calculate confusion matrix
             cm = confusion_matrix(y_true, y_pred)
 
-            # Create figure
-            fig, ax = plt.subplots(figsize=(10, 8))
+            # Calculate percentages for each row (true class)
+            cm_percentage = np.zeros_like(cm, dtype=float)
+            for row_idx in range(cm.shape[0]):
+                row_sum = np.sum(cm[row_idx, :])
+                if row_sum > 0:
+                    cm_percentage[row_idx, :] = (cm[row_idx, :] / row_sum) * 100
 
             # Plot confusion matrix
-            sns.heatmap(cm, annot=True, fmt='d', ax=ax, cmap='Blues')
+            sns.heatmap(cm, annot=True, fmt='d', ax=axes[i, j], cmap='Blues',
+                        xticklabels=class_names, yticklabels=class_names, cbar=False)
 
-            # Set title and labels
-            ax.set_title(f'Confusion Matrix - {signal_type} - {model_type}')
-            ax.set_xlabel('Predicted Label')
-            ax.set_ylabel('True Label')
+            # Add percentages
+            for row_idx in range(cm.shape[0]):
+                for col_idx in range(cm.shape[1]):
+                    if cm[row_idx, col_idx] > 0:
+                        axes[i, j].text(col_idx + 0.5, row_idx + 0.7,
+                                        f'({cm_percentage[row_idx, col_idx]:.1f}%)',
+                                        ha='center', va='center', color='black',
+                                        fontweight='bold' if row_idx == col_idx else 'normal')
 
-            # Set tick labels
-            n_classes = len(np.unique(np.concatenate([y_true, y_pred])))
-            ax.set_xticklabels(class_names[:n_classes])
-            ax.set_yticklabels(class_names[:n_classes])
+            # Add accuracy to the title
+            if 'accuracy' in metrics:
+                accuracy = metrics['accuracy']
+                axes[i, j].set_title(f'Accuracy: {accuracy:.3f}', fontsize=12)
 
-            # Save figure
-            if output_dir:
-                os.makedirs(output_dir, exist_ok=True)
-                plt.savefig(os.path.join(output_dir, f'{signal_type}_{model_type}_confusion_matrix.png'), dpi=300)
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
 
-            # Store figure
-            figures[f'{signal_type}_{model_type}_confusion_matrix'] = fig
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+        plt.savefig(os.path.join(output_dir, 'binary_confusion_matrices.png'), dpi=300)
 
-    return figures
+    return fig
 
 
 def plot_roc_curves(
