@@ -9,8 +9,6 @@ import os
 logger = logging.getLogger(__name__)
 
 
-# In mind/visualization/feature_importance.py - Improved neuron overlap visualization
-
 def plot_top_neurons_overlap(
         feature_importance: Dict[str, Dict[str, np.ndarray]],
         signal_types: List[str] = ['calcium', 'deltaf', 'deconv'],
@@ -86,7 +84,8 @@ def plot_top_neurons_overlap(
                      top_neurons.get('deconv', set())
     }
 
-    # Create improved visualization - Venn diagram style
+    # Create improved Venn diagram visualization
+    # Set figure size and create the figure
     fig1, ax1 = plt.subplots(figsize=(16, 14))
 
     # Define colors and alpha for each set
