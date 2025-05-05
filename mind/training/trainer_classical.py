@@ -302,7 +302,7 @@ def train_all_classical_models(
         # Train Random Forest
         rf_model, rf_metrics = train_random_forest(
             X_train, y_train, X_val, y_val, config,
-            optimize=True, class_weights=class_weights
+            optimize=True, class_weights=class_weights, signal_type=signal_type
         )
         results['models'][f"{signal_type}_random_forest"] = rf_model
         results['metrics'][f"{signal_type}_random_forest"] = rf_metrics
@@ -320,7 +320,7 @@ def train_all_classical_models(
         # Train SVM
         svm_model, svm_metrics, pca_transformer = train_svm(
             X_train, y_train, X_val, y_val, config,
-            optimize=True, class_weights=class_weights
+            optimize=True, class_weights=class_weights, signal_type=signal_type
         )
         results['models'][f"{signal_type}_svm"] = svm_model
         results['metrics'][f"{signal_type}_svm"] = svm_metrics
@@ -329,7 +329,7 @@ def train_all_classical_models(
 
         # Train MLP
         mlp_model, mlp_metrics = train_mlp(
-            X_train, y_train, X_val, y_val, config, optimize=True
+            X_train, y_train, X_val, y_val, config, optimize=True, signal_type=signal_type
         )
         results['models'][f"{signal_type}_mlp"] = mlp_model
         results['metrics'][f"{signal_type}_mlp"] = mlp_metrics
