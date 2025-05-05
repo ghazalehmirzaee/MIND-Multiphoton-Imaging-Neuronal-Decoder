@@ -56,37 +56,6 @@ def load_matlab_data(file_path: str) -> Dict[str, np.ndarray]:
         logger.error(f"Error loading MATLAB file: {e}")
         raise
 
-def align_neural_behavioral_data(neural_data, behavior_df):
-    """Align neural recording frames with behavioral events for binary classification."""
-    # Extract frame information
-    frame_starts = behavior_df['Frame Start'].values
-    frame_ends = behavior_df['Frame End'].values
-    foot_sides = behavior_df['Foot (L/R)'].values
-
-    # Create label array
-    num_frames = neural_data['calcium_signal'].shape[0]
-    labels = np.zeros(num_frames)
-
-    # Binary task: 0 for No footstep, 1 for RIGHT foot (contralateral) only
-    for i in range(len(frame_starts)):
-        start = int(frame_starts[i])
-        end = int(frame_ends[i])
-
-        if start < num_frames and end < num_frames:
-            # Only label RIGHT foot (contralateral) as 1
-            if foot_sides[i] == 'R':
-                labels[start:end + 1] = 1
-
-    # Count instances of each class
-    class_counts = np.bincount(labels.astype(int))
-    logger.info(f"Label distribution:")
-    logger.info(f"No footstep (0): {class_counts[0]} frames")
-    logger.info(f"Right foot (1): {class_counts[1]} frames")
-
-    neural_data['labels'] = labels
-    return neural_data
-
-
 def align_neural_behavioral_data(neural_data, behavior_df, binary_task=True):
     """Align neural recording frames with behavioral events with binary option."""
     # Extract frame information
