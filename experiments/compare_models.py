@@ -29,8 +29,8 @@ from mind.visualization.performance import (
     plot_performance_comparison,
     plot_signal_type_comparison,
     plot_model_comparison,
-    plot_confusion_matrices,
-    plot_roc_curves,
+    plot_binary_confusion_matrices,
+    plot_binary_roc_curves,
     create_comparative_performance_grid,
     plot_performance_radar,
     plot_cross_signal_comparison
@@ -40,6 +40,7 @@ from mind.visualization.feature_importance import (
     plot_comparative_feature_importance
 )
 from mind.visualization.signal_visualization import create_signal_visualizations
+from mind.evaluation.metrics import generate_metrics_report
 
 
 def parse_args():
@@ -301,17 +302,16 @@ def main():
             if wandb_run:
                 wandb_run.log({"model_comparison": wandb.Image(fig)})
 
-            # Plot confusion matrices
-            cm_figures = plot_confusion_matrices(
+            # Plot binary confusion matrices
+            cm_figure = plot_binary_confusion_matrices(
                 all_results,
                 output_dir=os.path.join(args.output_dir, 'figures')
             )
             if wandb_run:
-                for name, fig in cm_figures.items():
-                    wandb_run.log({name: wandb.Image(fig)})
+                wandb_run.log({"binary_confusion_matrices": wandb.Image(cm_figure)})
 
-            # Plot ROC curves
-            roc_figures = plot_roc_curves(
+            # Plot binary ROC curves
+            roc_figures = plot_binary_roc_curves(
                 all_results,
                 output_dir=os.path.join(args.output_dir, 'figures')
             )
@@ -342,6 +342,14 @@ def main():
             )
             if wandb_run:
                 wandb_run.log({"cross_signal_comparison": wandb.Image(fig)})
+
+            # Generate metrics report
+            metrics_report = generate_metrics_report(
+                all_results,
+                output_file=os.path.join(args.output_dir, 'metrics', 'metrics_report.json')
+            )
+            logger.info(
+                f"Generated metrics report saved to {os.path.join(args.output_dir, 'metrics', 'metrics_report.json')}")
 
         # Feature importance visualizations
         if classical_results and 'feature_importance' in classical_results:
