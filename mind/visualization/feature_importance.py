@@ -9,6 +9,8 @@ import os
 logger = logging.getLogger(__name__)
 
 
+# In mind/visualization/feature_importance.py - Improved neuron overlap visualization
+
 def plot_top_neurons_overlap(
         feature_importance: Dict[str, Dict[str, np.ndarray]],
         signal_types: List[str] = ['calcium', 'deltaf', 'deconv'],
@@ -24,11 +26,11 @@ def plot_top_neurons_overlap(
     feature_importance : Dict[str, Dict[str, np.ndarray]]
         Dictionary containing feature importance data
     signal_types : List[str], optional
-        List of signal types to compare, by default ['calcium', 'deltaf', 'deconv']
+        List of signal types to compare
     model_type : str, optional
-        Model type to use for comparison, by default 'rf'
+        Model type to use for comparison
     num_neurons : int, optional
-        Number of top neurons to include, by default 250
+        Number of top neurons to include
     output_dir : Optional[str], optional
         Output directory, by default None
 
@@ -37,7 +39,7 @@ def plot_top_neurons_overlap(
     Dict[str, plt.Figure]
         Dictionary containing overlap visualization figures
     """
-    logger.info(f"Creating top neurons overlap visualization for {model_type} model")
+    logger.info(f"Creating top {num_neurons} neurons overlap visualization for {model_type} model")
 
     # Initialize figures dictionary
     figures = {}
@@ -84,41 +86,98 @@ def plot_top_neurons_overlap(
                      top_neurons.get('deconv', set())
     }
 
-    # Create color-coded neuron index scatter plot
-    fig1, ax1 = plt.subplots(figsize=(15, 10))
+    # Create improved visualization - Venn diagram style
+    fig1, ax1 = plt.subplots(figsize=(16, 14))
 
-    # Define colors and offsets for each set
-    set_configs = {
-        'calcium_only': {'color': 'blue', 'y': 1, 'label': 'Calcium Only'},
-        'deltaf_only': {'color': 'green', 'y': 2, 'label': 'DeltaF Only'},
-        'deconv_only': {'color': 'red', 'y': 3, 'label': 'Deconv Only'},
-        'calcium_deltaf': {'color': 'cyan', 'y': 4, 'label': 'Calcium ∩ DeltaF'},
-        'calcium_deconv': {'color': 'magenta', 'y': 5, 'label': 'Calcium ∩ Deconv'},
-        'deltaf_deconv': {'color': 'yellow', 'y': 6, 'label': 'DeltaF ∩ Deconv'},
-        'all_three': {'color': 'black', 'y': 7, 'label': 'All Three'}
+    # Define colors and alpha for each set
+    set_colors = {
+        'calcium_only': '#3274A1',  # Dark blue
+        'deltaf_only': '#E1812C',  # Orange
+        'deconv_only': '#3A923A',  # Green
+        'calcium_deltaf': '#9C9EDE',  # Light purple
+        'calcium_deconv': '#8C564B',  # Brown
+        'deltaf_deconv': '#E377C2',  # Pink
+        'all_three': '#7F7F7F'  # Gray
     }
 
-    # Plot each set
-    for set_name, indices in overlaps.items():
-        if indices:
-            config = set_configs[set_name]
-            sorted_indices = sorted(indices)
-            ax1.scatter(sorted_indices, [config['y']] * len(sorted_indices),
-                        s=40, color=config['color'], alpha=0.7, label=f"{config['label']} ({len(indices)})")
+    # Define circles for Venn diagram
+    # Use patches for better control
+    from matplotlib.patches import Circle, Wedge, Polygon
+    from matplotlib.collections import PatchCollection
 
-    # Set labels and title
-    ax1.set_xlabel('Neuron Index', fontsize=14)
-    ax1.set_yticks([config['y'] for _, config in set_configs.items()])
-    ax1.set_yticklabels([config['label'] for _, config in set_configs.items()])
-    ax1.set_title(f'Top {num_neurons} Neurons Overlap - {model_type.upper()} Model', fontsize=16)
-    ax1.grid(axis='x', linestyle='--', alpha=0.3)
+    # Calculate optimal circle size and positions
+    radius = 1.2
+    centers = {
+        'calcium': (-1.2, 0),  # Left
+        'deltaf': (1.2, 0),  # Right
+        'deconv': (0, 1.5)  # Top
+    }
 
-    # Add text annotations with counts
-    for set_name, indices in overlaps.items():
-        if indices:
-            config = set_configs[set_name]
-            ax1.text(-20, config['y'], f"({len(indices)})", ha='right', va='center',
-                     fontweight='bold', color=config['color'])
+    # Draw circles for each signal type
+    for signal_type, center in centers.items():
+        if signal_type not in top_neurons:
+            continue
+
+        circle = Circle(center, radius, fill=True,
+                        edgecolor='black', linewidth=2,
+                        facecolor=set_colors.get(f'{signal_type}_only'),
+                        alpha=0.4)
+        ax1.add_patch(circle)
+
+        # Add signal type label
+        ax1.text(center[0], center[1], signal_type.capitalize(),
+                 ha='center', va='center', fontsize=16, fontweight='bold')
+
+    # Add count annotations in visually appealing positions
+    positions = {
+        'calcium_only': (-1.6, -0.6),
+        'deltaf_only': (1.6, -0.6),
+        'deconv_only': (0, 2.1),
+        'calcium_deltaf': (0, -0.8),
+        'calcium_deconv': (-0.8, 0.8),
+        'deltaf_deconv': (0.8, 0.8),
+        'all_three': (0, 0.5)
+    }
+
+    # Add count labels with nice boxes
+    for overlap_type, pos in positions.items():
+        count = len(overlaps[overlap_type])
+        if count > 0:
+            ax1.text(pos[0], pos[1], f"{count}",
+                     ha='center', va='center', fontsize=14, fontweight='bold',
+                     bbox=dict(boxstyle="round,pad=0.5", facecolor='white', alpha=0.8,
+                               edgecolor=set_colors.get(overlap_type, 'black')))
+
+    # Add a legend explaining the diagram
+    legend_elements = []
+    for overlap_type, neurons in overlaps.items():
+        if len(neurons) > 0:
+            label = overlap_type.replace('_', ' ∩ ').replace(' only', '')
+            label = label.capitalize()
+            legend_elements.append(plt.Line2D([0], [0], marker='o', color='w',
+                                              markerfacecolor=set_colors.get(overlap_type),
+                                              markersize=15, label=f"{label} ({len(neurons)})"))
+
+    ax1.legend(handles=legend_elements, loc='upper center',
+               bbox_to_anchor=(0.5, -0.05), fontsize=12, ncol=2)
+
+    # Set limits and remove ticks
+    ax1.set_xlim(-2.5, 2.5)
+    ax1.set_ylim(-2, 2.5)
+    ax1.set_aspect('equal')
+    ax1.axis('off')
+
+    # Add title
+    ax1.set_title(f'Overlap of Top {num_neurons} Neurons across Signal Types - {model_type.upper()} Model',
+                  fontsize=18, y=1.05)
+
+    # Add total counts
+    for signal_type in signal_types:
+        if signal_type in top_neurons:
+            ax1.text(centers[signal_type][0], centers[signal_type][1] - 0.3,
+                     f"Total: {len(top_neurons[signal_type])}",
+                     ha='center', va='center', fontsize=12,
+                     bbox=dict(boxstyle="round", facecolor='white', alpha=0.7))
 
     plt.tight_layout()
 
@@ -131,43 +190,94 @@ def plot_top_neurons_overlap(
     figures[f'{model_type}_top_neurons_overlap'] = fig1
 
     # Create a more detailed visualization for neuron indices by group
-    fig2, ax2 = plt.subplots(figsize=(16, 12))
+    fig2, ax2 = plt.subplots(figsize=(20, 12))
 
-    # Create a color map for the neurons
-    neuron_colors = {}
-    max_neuron = 0
+    # Define a consistent color palette for the visualization
+    color_palette = {
+        'calcium_only': '#3274A1',  # Dark blue
+        'deltaf_only': '#E1812C',  # Orange
+        'deconv_only': '#3A923A',  # Green
+        'calcium_deltaf': '#9C9EDE',  # Light purple
+        'calcium_deconv': '#8C564B',  # Brown
+        'deltaf_deconv': '#E377C2',  # Pink
+        'all_three': '#7F7F7F'  # Gray
+    }
 
-    for set_name, indices in overlaps.items():
-        config = set_configs[set_name]
+    # Create a horizontal bar chart showing neuron distributions
+    y_positions = []
+    colors = []
+    labels = []
+    neuron_indices = []
+
+    # Position counter for y-axis
+    y_pos = 0
+
+    # Process each overlap group
+    for overlap_type in ['all_three', 'calcium_deconv', 'deltaf_deconv',
+                         'calcium_deltaf', 'calcium_only', 'deltaf_only', 'deconv_only']:
+        indices = sorted(list(overlaps[overlap_type]))
+        if not indices:
+            continue
+
+        # Add label for group
+        nice_label = overlap_type.replace('_', ' ∩ ').replace(' only', '')
+        nice_label = nice_label.capitalize()
+
+        ax2.text(-20, y_pos + len(indices) / 2, f"{nice_label} ({len(indices)})",
+                 ha='right', va='center', fontsize=14, fontweight='bold',
+                 color=color_palette[overlap_type])
+
+        # Add neurons from this group
         for idx in indices:
-            neuron_colors[idx] = config['color']
-            max_neuron = max(max_neuron, idx)
+            y_positions.append(y_pos)
+            colors.append(color_palette[overlap_type])
+            labels.append(f"Neuron {idx}")
+            neuron_indices.append(idx)
+            y_pos += 1
 
-    # Plot colored neuron indices
-    all_neurons = sorted(neuron_colors.keys())
-    y_positions = np.ones(len(all_neurons))
-    scatter = ax2.scatter(all_neurons, y_positions, c=[neuron_colors[n] for n in all_neurons],
-                          s=100, alpha=0.7)
+        # Add space between groups
+        y_pos += 2
 
-    # Create a custom legend
-    legend_elements = [
-        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=config['color'],
-                   markersize=10, label=f"{config['label']} ({len(indices)})")
-        for set_name, indices in overlaps.items() if indices
-    ]
-    ax2.legend(handles=legend_elements, loc='upper right', fontsize=12)
+    # Create scatter plot of neuron indices
+    ax2.scatter(neuron_indices, y_positions, c=colors, s=100, alpha=0.8)
+
+    # Add connecting lines between points for better visualization
+    for group in ['all_three', 'calcium_deconv', 'deltaf_deconv',
+                  'calcium_deltaf', 'calcium_only', 'deltaf_only', 'deconv_only']:
+        indices = sorted(list(overlaps[group]))
+        if len(indices) > 1:
+            group_y_positions = [y for i, y in zip(neuron_indices, y_positions)
+                                 if i in indices]
+            group_indices = [i for i in neuron_indices if i in indices]
+            ax2.plot(group_indices, group_y_positions, '-',
+                     color=color_palette[group], alpha=0.3, linewidth=1)
 
     # Set labels and title
     ax2.set_xlabel('Neuron Index', fontsize=14)
     ax2.set_yticks([])
-    ax2.set_xlim(-10, max_neuron + 10)
-    ax2.set_title(f'Top {num_neurons} Neurons Index Distribution - {model_type.upper()} Model', fontsize=16)
+    ax2.set_title(f'Distribution of Top {num_neurons} Neurons by Signal Type Overlap - {model_type.upper()} Model',
+                  fontsize=16)
+
+    # Add grid for better readability
     ax2.grid(axis='x', linestyle='--', alpha=0.3)
 
-    # Add neuron count annotation
-    total_neurons = sum(len(indices) for indices in overlaps.values())
-    ax2.text(0.02, 0.95, f'Total unique neurons: {total_neurons}',
-             transform=ax2.transAxes, fontsize=12, fontweight='bold')
+    # Add legend explaining color coding
+    legend_elements = []
+    for group, color in color_palette.items():
+        if len(overlaps[group]) > 0:
+            nice_label = group.replace('_', ' ∩ ').replace(' only', '')
+            nice_label = nice_label.capitalize()
+            legend_elements.append(plt.Line2D([0], [0], marker='o', color='w',
+                                              markerfacecolor=color, markersize=10,
+                                              label=f"{nice_label} ({len(overlaps[group])})"))
+
+    ax2.legend(handles=legend_elements, loc='upper right', fontsize=12)
+
+    # Add total unique neurons count
+    total_neurons = sum(len(group) for group in overlaps.values())
+    ax2.text(0.02, 0.98, f'Total unique neurons: {total_neurons}',
+             transform=ax2.transAxes, fontsize=14, fontweight='bold',
+             bbox=dict(boxstyle="round", facecolor='white', alpha=0.8))
 
     plt.tight_layout()
 
@@ -179,6 +289,7 @@ def plot_top_neurons_overlap(
     figures[f'{model_type}_top_neurons_indices'] = fig2
 
     return figures
+
 
 def plot_feature_importance_heatmap(
         importance_2d: np.ndarray,
