@@ -238,7 +238,7 @@ def train_cnn_model(
         wandb_run: Any = None
 ) -> Tuple[nn.Module, Dict[str, Any]]:
     """
-    Train a Convolutional Neural Network model.
+    Train a Convolutional Neural Network model with signal-specific optimizations.
 
     Parameters
     ----------
@@ -275,24 +275,57 @@ def train_cnn_model(
     train_loader = dataloaders['train_loader']
     val_loader = dataloaders['val_loader']
 
-    # Create model
-    model = create_cnn(n_neurons, window_size, n_classes, config)
+    # Create model with signal-specific optimizations
+    model = create_cnn(n_neurons, window_size, n_classes, config, signal_type)
     model = model.to(device)
 
-    # Create optimizer
-    optimizer = create_optimizer(model, config)
+    # Create optimizer with adjusted parameters for deconvolved signals
+    if signal_type == 'deconv':
+        # Higher learning rate and lower weight decay for deconvolved signals
+        lr_multiplier = 1.3
+        weight_decay = 1e-6  # Lower weight decay for better flexibility
+    else:
+        lr_multiplier = 1.0
+        weight_decay = config['training'].get('weight_decay', 1e-5)
 
-    # Create scheduler factory
-    scheduler_fn = create_scheduler(
-        optimizer, config, len(dataloaders['X_train']),
-        config['training'].get('batch_size', 32)
+    optimizer = optim.AdamW(
+        model.parameters(),
+        lr=config['training'].get('learning_rate', 0.001) * lr_multiplier,
+        weight_decay=weight_decay
     )
+
+    # Create scheduler factory with adjusted parameters for deconvolved signals
+    if signal_type == 'deconv':
+        def scheduler_fn(optimizer, num_epochs):
+            # Calculate steps per epoch
+            steps_per_epoch = (len(dataloaders['X_train']) +
+                               config['training'].get('batch_size', 32) - 1) // config['training'].get('batch_size', 32)
+
+            # OneCycleLR with higher max_lr for deconvolved signals
+            return optim.lr_scheduler.OneCycleLR(
+                optimizer,
+                max_lr=config['training'].get('learning_rate', 0.001) * 1.6,  # 60% higher max_lr
+                epochs=num_epochs,
+                steps_per_epoch=steps_per_epoch,
+                pct_start=0.25,  # Faster warmup
+                anneal_strategy='cos',
+                div_factor=15.0,  # Lower div_factor for higher initial learning rate
+                final_div_factor=1e4
+            )
+    else:
+        scheduler_fn = create_scheduler(
+            optimizer, config, len(dataloaders['X_train']),
+            config['training'].get('batch_size', 32)
+        )
 
     # Get class weights if available
     class_weights = data.get('class_weights', {}).get(signal_type, None)
 
     # Create loss function
-    if class_weights is not None:
+    if signal_type == 'deconv':
+        # Use focal loss with higher alpha for deconvolved signals
+        criterion = FocalLoss(alpha=2.5, gamma=2.0)
+    elif class_weights is not None:
         # Use focal loss for imbalanced data
         criterion = FocalLoss(alpha=2.0, gamma=2.0)
     else:
@@ -301,7 +334,15 @@ def train_cnn_model(
     # Create model name
     model_name = create_model_name(signal_type, 'cnn')
 
-    # Train model
+    # Train model with more epochs for deconvolved signals
+    if signal_type == 'deconv':
+        # Make a copy of config to increase epochs for deconvolved signal
+        local_config = config.copy()
+        local_config['training'] = config['training'].copy()
+        local_config['training']['epochs'] = int(config['training'].get('epochs', 100) * 1.2)
+    else:
+        local_config = config
+
     model, history = train_model(
         model=model,
         train_loader=train_loader,
@@ -309,7 +350,7 @@ def train_cnn_model(
         criterion=criterion,
         optimizer=optimizer,
         device=device,
-        config=config,
+        config=local_config,
         scheduler_fn=scheduler_fn,
         class_weights=class_weights,
         model_name=model_name,
