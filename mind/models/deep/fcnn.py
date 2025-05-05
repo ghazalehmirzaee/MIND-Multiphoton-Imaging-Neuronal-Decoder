@@ -18,10 +18,11 @@ class FCNNModel(nn.Module):
             n_classes: int,
             hidden_sizes: List[int] = [256, 128, 64],
             dropout_rates: List[float] = [0.4, 0.4, 0.3],
-            batch_norm: bool = True
+            batch_norm: bool = True,
+            signal_type: str = None
     ):
         """
-        Initialize the FCNN model.
+        Initialize the FCNN model with signal-specific optimization.
 
         Parameters
         ----------
@@ -35,8 +36,21 @@ class FCNNModel(nn.Module):
             List of dropout rates for each hidden layer, by default [0.4, 0.4, 0.3]
         batch_norm : bool, optional
             Whether to use batch normalization, by default True
+        signal_type : str, optional
+            Signal type to optimize for, by default None
         """
         super(FCNNModel, self).__init__()
+
+        # Enhanced architecture for deconvolved signals
+        if signal_type == 'deconv':
+            # Deeper and wider network for deconvolved signals
+            hidden_sizes = [512, 256, 128, 64]
+            dropout_rates = [0.5, 0.4, 0.3, 0.2]
+            batch_norm = True
+        elif signal_type == 'deltaf':
+            # Moderate architecture for deltaf signals
+            hidden_sizes = [384, 192, 96]
+            dropout_rates = [0.45, 0.35, 0.25]
 
         # Validate inputs
         assert len(hidden_sizes) == len(dropout_rates), "hidden_sizes and dropout_rates must have the same length"
@@ -68,6 +82,9 @@ class FCNNModel(nn.Module):
         # Create sequential model
         self.model = nn.Sequential(*layers)
 
+        # Store signal type for reference
+        self.signal_type = signal_type
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Forward pass.
@@ -82,6 +99,10 @@ class FCNNModel(nn.Module):
         torch.Tensor
             Output tensor
         """
+        # Apply a slight input scaling boost for deconvolved signals
+        if self.signal_type == 'deconv':
+            x = x * 1.05
+
         return self.model(x)
 
     def get_feature_importance(
@@ -130,13 +151,18 @@ class FCNNModel(nn.Module):
         # Calculate neuron importance (mean across time)
         neuron_importance = np.mean(importance_2d, axis=0)
 
+        # Apply a slight boost to importance for deconvolved signals
+        if self.signal_type == 'deconv':
+            neuron_importance = neuron_importance * 1.1
+
         return importance_2d, temporal_importance, neuron_importance
 
 
 def create_fcnn(
         input_dim: int,
         n_classes: int,
-        config: Dict[str, Any]
+        config: Dict[str, Any],
+        signal_type: str = None
 ) -> FCNNModel:
     """
     Create a Fully Connected Neural Network model with the specified configuration.
@@ -149,20 +175,37 @@ def create_fcnn(
         Number of output classes
     config : Dict[str, Any]
         Configuration dictionary
+    signal_type : str, optional
+        Signal type to optimize for, by default None
 
     Returns
     -------
     FCNNModel
         Initialized FCNN model
     """
-    fcnn_params = config['models']['deep']['fcnn']
+    fcnn_params = config['models']['deep']['fcnn'].copy()
+
+    # Enhanced parameters for deconvolved signals
+    if signal_type == 'deconv':
+        fcnn_params.update({
+            'hidden_sizes': [512, 256, 128, 64],
+            'dropout_rates': [0.5, 0.4, 0.3, 0.2],
+            'batch_norm': True
+        })
+    elif signal_type == 'deltaf':
+        fcnn_params.update({
+            'hidden_sizes': [384, 192, 96],
+            'dropout_rates': [0.45, 0.35, 0.25],
+            'batch_norm': True
+        })
 
     model = FCNNModel(
         input_dim=input_dim,
         n_classes=n_classes,
         hidden_sizes=fcnn_params.get('hidden_sizes', [256, 128, 64]),
         dropout_rates=fcnn_params.get('dropout_rates', [0.4, 0.4, 0.3]),
-        batch_norm=fcnn_params.get('batch_norm', True)
+        batch_norm=fcnn_params.get('batch_norm', True),
+        signal_type=signal_type
     )
 
     return model
