@@ -111,7 +111,7 @@ def train_fcnn_model(
         wandb_run: Any = None
 ) -> Tuple[nn.Module, Dict[str, Any]]:
     """
-    Train a Fully Connected Neural Network model.
+    Train a Fully Connected Neural Network model with signal-specific optimizations.
 
     Parameters
     ----------
@@ -147,24 +147,57 @@ def train_fcnn_model(
     train_loader = dataloaders['train_loader']
     val_loader = dataloaders['val_loader']
 
-    # Create model
-    model = create_fcnn(input_dim, n_classes, config)
+    # Create model with signal-specific optimizations
+    model = create_fcnn(input_dim, n_classes, config, signal_type)
     model = model.to(device)
 
-    # Create optimizer
-    optimizer = create_optimizer(model, config)
+    # Create optimizer with adjusted learning rate for deconvolved signals
+    if signal_type == 'deconv':
+        # Higher learning rate for deconvolved signals
+        lr_multiplier = 1.2
+        weight_decay = 5e-6  # Reduced weight decay for better flexibility
+    else:
+        lr_multiplier = 1.0
+        weight_decay = config['training'].get('weight_decay', 1e-5)
 
-    # Create scheduler factory
-    scheduler_fn = create_scheduler(
-        optimizer, config, len(dataloaders['X_train']),
-        config['training'].get('batch_size', 32)
+    optimizer = optim.AdamW(
+        model.parameters(),
+        lr=config['training'].get('learning_rate', 0.001) * lr_multiplier,
+        weight_decay=weight_decay
     )
+
+    # Create scheduler factory with adjusted parameters for deconvolved signals
+    if signal_type == 'deconv':
+        def scheduler_fn(optimizer, num_epochs):
+            # Calculate steps per epoch
+            steps_per_epoch = (len(dataloaders['X_train']) +
+                               config['training'].get('batch_size', 32) - 1) // config['training'].get('batch_size', 32)
+
+            # OneCycleLR with higher max_lr for deconvolved signals
+            return optim.lr_scheduler.OneCycleLR(
+                optimizer,
+                max_lr=config['training'].get('learning_rate', 0.001) * 1.5,  # 50% higher max_lr
+                epochs=num_epochs,
+                steps_per_epoch=steps_per_epoch,
+                pct_start=0.3,
+                anneal_strategy='cos',
+                div_factor=20.0,  # Lower div_factor for higher initial learning rate
+                final_div_factor=1e4
+            )
+    else:
+        scheduler_fn = create_scheduler(
+            optimizer, config, len(dataloaders['X_train']),
+            config['training'].get('batch_size', 32)
+        )
 
     # Get class weights if available
     class_weights = data.get('class_weights', {}).get(signal_type, None)
 
-    # Create loss function
-    if class_weights is not None:
+    # Create loss function based on signal type
+    if signal_type == 'deconv':
+        # Use focal loss for deconvolved signals to better handle class imbalance
+        criterion = FocalLoss(alpha=2.0, gamma=2.0)
+    elif class_weights is not None:
         # Convert to PyTorch tensor
         weight_tensor = torch.ones(n_classes, device=device)
         for cls, weight in class_weights.items():
