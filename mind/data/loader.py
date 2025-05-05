@@ -109,30 +109,9 @@ def load_behavioral_data(file_path: str) -> pd.DataFrame:
         raise
 
 
-def align_neural_behavioral_data(
-        neural_data: Dict[str, np.ndarray],
-        behavior_df: pd.DataFrame
-) -> Dict[str, np.ndarray]:
-    """
-    Align neural recording frames with behavioral events.
-
-    Parameters
-    ----------
-    neural_data : Dict[str, np.ndarray]
-        Dictionary containing neural data
-    behavior_df : pd.DataFrame
-        DataFrame containing behavioral data
-
-    Returns
-    -------
-    Dict[str, np.ndarray]
-        Updated neural data dictionary with labels, where:
-        - 0: No footstep
-        - 1: RIGHT foot (contralateral)
-        - 2: LEFT foot (ipsilateral)
-    """
-    logger.info("Aligning neural recording frames with behavioral events")
-
+# In mind/data/processor.py
+def align_neural_behavioral_data(neural_data, behavior_df, binary_task=True):
+    """Align neural recording frames with behavioral events with binary option."""
     # Extract frame information
     frame_starts = behavior_df['Frame Start'].values
     frame_ends = behavior_df['Frame End'].values
@@ -142,28 +121,34 @@ def align_neural_behavioral_data(
     num_frames = neural_data['calcium_signal'].shape[0]
     labels = np.zeros(num_frames)
 
-    # Create different labels: RIGHT=1, LEFT=2
-    for i in range(len(frame_starts)):
-        start = int(frame_starts[i])
-        end = int(frame_ends[i])
+    if binary_task:
+        # Binary task: 0 for No footstep, 1 for RIGHT foot (contralateral) only
+        for i in range(len(frame_starts)):
+            start = int(frame_starts[i])
+            end = int(frame_ends[i])
 
-        # Check if frames are within data range
-        if start < num_frames and end < num_frames:
-            # Right foot (contralateral) = 1, Left foot (ipsilateral) = 2
-            label_value = 1 if foot_sides[i] == 'R' else 2
-            labels[start:end + 1] = label_value
+            if start < num_frames and end < num_frames:
+                # Only label RIGHT foot (contralateral) as 1
+                if foot_sides[i] == 'R':
+                    labels[start:end + 1] = 1
+    else:
+        # Original multi-class labeling
+        for i in range(len(frame_starts)):
+            start = int(frame_starts[i])
+            end = int(frame_ends[i])
+
+            if start < num_frames and end < num_frames:
+                label_value = 1 if foot_sides[i] == 'R' else 2
+                labels[start:end + 1] = label_value
 
     # Count instances of each class
     class_counts = np.bincount(labels.astype(int))
     logger.info(f"Label distribution:")
     logger.info(f"No footstep (0): {class_counts[0]} frames")
-    if len(class_counts) > 1:
-        logger.info(f"Right foot (1): {class_counts[1]} frames")
-    if len(class_counts) > 2:
-        logger.info(f"Left foot (2): {class_counts[2]} frames")
+    logger.info(f"Right foot (1): {class_counts[1]} frames")
 
-    # Add labels to the data dictionary
     neural_data['labels'] = labels
+    neural_data['binary_task'] = binary_task
 
     return neural_data
 

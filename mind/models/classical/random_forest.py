@@ -7,11 +7,20 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def create_random_forest(config: Dict[str, Any]) -> RandomForestClassifier:
-    """
-    Create a Random Forest classifier with the specified configuration.
-    """
-    rf_params = config['models']['classical']['random_forest']
+def create_random_forest(config, signal_type='calcium'):
+    """Create optimized Random Forest model with signal-specific configurations."""
+    rf_params = config['models']['classical']['random_forest'].copy()
+
+    # Enhanced parameters specifically for deconvolved signals
+    if signal_type == 'deconv':
+        rf_params.update({
+            'n_estimators': 300,  # More trees for deconvolved signals
+            'max_depth': 40,  # Deeper trees to capture complex patterns
+            'min_samples_split': 2,
+            'min_samples_leaf': 1,
+            'bootstrap': True,
+            'max_features': 'sqrt'
+        })
 
     model = RandomForestClassifier(
         n_estimators=rf_params.get('n_estimators', 200),
@@ -20,7 +29,7 @@ def create_random_forest(config: Dict[str, Any]) -> RandomForestClassifier:
         min_samples_leaf=rf_params.get('min_samples_leaf', 2),
         class_weight=rf_params.get('class_weight', 'balanced'),
         random_state=config['experiment'].get('seed', 42),
-        n_jobs=-1  # Use all available cores
+        n_jobs=-1
     )
 
     return model
