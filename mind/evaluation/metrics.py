@@ -1,4 +1,6 @@
 """Metrics calculation functions."""
+import os
+
 import numpy as np
 from sklearn.metrics import (
     accuracy_score,
@@ -151,4 +153,115 @@ def calculate_model_comparison(metrics_list: List[Dict[str, Any]]) -> Dict[str, 
             comparison['model_rankings'][data['index']]['f1_rank'] = rank + 1
 
     return comparison
+
+
+def generate_metrics_report(
+        results: Dict[str, Dict[str, Dict[str, Any]]],
+        output_file: Optional[str] = None
+) -> Dict[str, Dict[str, Dict[str, float]]]:
+    """
+    Generate a comprehensive metrics report in JSON format.
+
+    Parameters
+    ----------
+    results : Dict[str, Dict[str, Dict[str, Any]]]
+        Dictionary containing results
+    output_file : Optional[str], optional
+        Output file path, by default None
+
+    Returns
+    -------
+    Dict[str, Dict[str, Dict[str, float]]]
+        Structured metrics report
+    """
+    logger.info("Generating metrics report")
+
+    # Define signal types and model types
+    signal_types = ['calcium', 'deltaf', 'deconv']
+    model_types = ['random_forest', 'svm', 'mlp', 'fcnn', 'cnn']
+    metrics_to_include = ['accuracy', 'precision_macro', 'recall_macro', 'f1_macro']
+
+    # Initialize report structure
+    report = {}
+
+    # Extract metrics for each signal type and model
+    for signal_type in signal_types:
+        if signal_type not in results:
+            logger.warning(f"Results for signal type {signal_type} not found")
+            continue
+
+        signal_report = {}
+
+        for model_type in model_types:
+            if model_type not in results[signal_type]:
+                logger.warning(f"Results for model type {model_type} not found in {signal_type}")
+                continue
+
+            model_metrics = results[signal_type][model_type]
+
+            # Ensure all required metrics exist
+            model_report = {}
+            for metric in metrics_to_include:
+                if metric in model_metrics:
+                    model_report[metric] = model_metrics[metric]
+                else:
+                    model_report[metric] = None
+                    logger.warning(f"Metric {metric} not found in {signal_type}_{model_type}")
+
+            # Add ROC AUC if available
+            if 'roc_auc' in model_metrics:
+                model_report['roc_auc'] = model_metrics['roc_auc']
+            elif 'probabilities' in model_metrics and 'targets' in model_metrics:
+                try:
+                    y_prob = model_metrics['probabilities']
+                    y_true = model_metrics['targets']
+
+                    # For binary classification, use probability for class 1
+                    if y_prob.shape[1] > 1:
+                        y_prob_positive = y_prob[:, 1]
+                    else:
+                        y_prob_positive = y_prob
+
+                    # Calculate ROC AUC
+                    model_report['roc_auc'] = roc_auc_score(y_true, y_prob_positive)
+                except Exception as e:
+                    logger.warning(f"Could not calculate ROC AUC for {signal_type}_{model_type}: {e}")
+                    model_report['roc_auc'] = None
+            else:
+                model_report['roc_auc'] = None
+                logger.warning(f"ROC AUC not available for {signal_type}_{model_type}")
+
+            signal_report[model_type] = model_report
+
+        report[signal_type] = signal_report
+
+    # Save report to JSON file if output_file is provided
+    if output_file:
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
+
+        # Convert numpy types to Python native types
+        def convert_numpy_to_python(obj):
+            if isinstance(obj, np.ndarray):
+                return obj.tolist()
+            elif isinstance(obj, np.integer):
+                return int(obj)
+            elif isinstance(obj, np.floating):
+                return float(obj)
+            elif isinstance(obj, np.bool_):
+                return bool(obj)
+            elif isinstance(obj, dict):
+                return {k: convert_numpy_to_python(v) for k, v in obj.items()}
+            elif isinstance(obj, (list, tuple)):
+                return [convert_numpy_to_python(i) for i in obj]
+            else:
+                return obj
+
+        report_json = convert_numpy_to_python(report)
+
+        with open(output_file, 'w') as f:
+            json.dump(report_json, f, indent=4)
+
+        logger.info(f"Metrics report saved to {output_file}")
+
+    return report
 
