@@ -59,7 +59,7 @@ def create_mlp(
     return MLPClassifier(**base_params)
 
 
-def train_mlp(
+def optimize_mlp(
         X_train: np.ndarray,
         y_train: np.ndarray,
         X_val: np.ndarray,

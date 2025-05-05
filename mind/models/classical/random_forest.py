@@ -58,7 +58,7 @@ def create_random_forest(
     return RandomForestClassifier(**base_params)
 
 
-def train_random_forest(
+def optimize_random_forest(
         X_train: np.ndarray,
         y_train: np.ndarray,
         X_val: np.ndarray,

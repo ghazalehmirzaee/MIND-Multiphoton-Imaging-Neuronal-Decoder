@@ -67,7 +67,7 @@ def create_svm(
     return model, pca
 
 
-def train_svm(
+def optimize_svm(
         X_train: np.ndarray,
         y_train: np.ndarray,
         X_val: np.ndarray,
