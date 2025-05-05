@@ -22,95 +22,37 @@ from mind.utils.experiment_tracking import log_metrics
 
 logger = logging.getLogger(__name__)
 
-
-def train_random_forest(
-        X_train: np.ndarray,
-        y_train: np.ndarray,
-        X_val: np.ndarray,
-        y_val: np.ndarray,
-        config: Dict[str, Any],
-        optimize: bool = True,
-        class_weights: Optional[Dict[int, float]] = None,
-        signal_type: str = None
-) -> Tuple[Any, Dict[str, Any]]:
-    """
-    Train a Random Forest model efficiently with signal-specific optimizations.
-    """
+def train_random_forest(X_train, y_train, X_val, y_val, config, optimize=True, class_weights=None, signal_type=None):
+    """Train a Random Forest model for binary classification."""
     logger.info(f"Training Random Forest for {signal_type if signal_type else 'general'} data")
 
-    if optimize:
-        # Optimize hyperparameters with signal-specific settings
-        model, best_params = optimize_random_forest(
-            X_train, y_train, config, class_weights, signal_type
-        )
-        logger.info(f"Optimized Random Forest parameters for {signal_type}: {best_params}")
-    else:
-        # Create model with signal-specific parameters
-        model = create_random_forest(config, signal_type)
+    # Create model
+    model = create_random_forest(signal_type, config['experiment'].get('seed', 42))
 
-        # Apply class weights if provided
-        if class_weights is not None:
-            model.class_weight = class_weights
+    # Apply class weights if provided
+    if class_weights is not None:
+        model.class_weight = class_weights
 
-        # Train model
-        model.fit(X_train, y_train.astype(int))
+    # Train model - convert to binary classification
+    model.fit(X_train, y_train.astype(int))
 
     # Evaluate model
     y_pred = model.predict(X_val)
-
-    # For binary classification, ensure probabilities are calculated
-    if hasattr(model, 'predict_proba'):
-        y_prob = model.predict_proba(X_val)
-    else:
-        y_prob = None
+    y_prob = model.predict_proba(X_val)
 
     # Calculate metrics
-    accuracy = accuracy_score(y_val, y_pred)
-    precision_macro = precision_score(y_val, y_pred, average='macro', zero_division=0)
-    recall_macro = recall_score(y_val, y_pred, average='macro', zero_division=0)
-    f1_macro = f1_score(y_val, y_pred, average='macro', zero_division=0)
-
-    # Calculate class-specific metrics for binary classification
-    classes = np.unique(np.concatenate([y_val, y_pred]))
-    class_metrics = {}
-    for cls in classes:
-        # Create binary labels for the current class
-        y_val_binary = (y_val == cls).astype(int)
-        y_pred_binary = (y_pred == cls).astype(int)
-
-        # Calculate metrics
-        class_metrics[f'precision_class_{int(cls)}'] = precision_score(
-            y_val_binary, y_pred_binary, zero_division=0
-        )
-        class_metrics[f'recall_class_{int(cls)}'] = recall_score(
-            y_val_binary, y_pred_binary, zero_division=0
-        )
-        class_metrics[f'f1_class_{int(cls)}'] = f1_score(
-            y_val_binary, y_pred_binary, zero_division=0
-        )
-
-    # Log metrics
-    logger.info(f"Random Forest validation metrics for {signal_type}:")
-    logger.info(f"  Accuracy: {accuracy:.4f}")
-    logger.info(f"  Precision (macro): {precision_macro:.4f}")
-    logger.info(f"  Recall (macro): {recall_macro:.4f}")
-    logger.info(f"  F1 (macro): {f1_macro:.4f}")
-
-    # Create metrics dictionary
     metrics = {
-        'accuracy': accuracy,
-        'precision_macro': precision_macro,
-        'recall_macro': recall_macro,
-        'f1_macro': f1_macro,
+        'accuracy': accuracy_score(y_val, y_pred),
+        'precision_macro': precision_score(y_val, y_pred, average='macro', zero_division=0),
+        'recall_macro': recall_score(y_val, y_pred, average='macro', zero_division=0),
+        'f1_macro': f1_score(y_val, y_pred, average='macro', zero_division=0),
         'predictions': y_pred,
-        'probabilities': y_prob,  # Add probabilities for ROC curves
+        'probabilities': y_prob,
         'targets': y_val
     }
 
-    # Add class-specific metrics
-    metrics.update(class_metrics)
-
     return model, metrics
+
 
 def train_svm(
         X_train: np.ndarray,

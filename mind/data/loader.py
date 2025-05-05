@@ -56,57 +56,36 @@ def load_matlab_data(file_path: str) -> Dict[str, np.ndarray]:
         logger.error(f"Error loading MATLAB file: {e}")
         raise
 
+def align_neural_behavioral_data(neural_data, behavior_df):
+    """Align neural recording frames with behavioral events for binary classification."""
+    # Extract frame information
+    frame_starts = behavior_df['Frame Start'].values
+    frame_ends = behavior_df['Frame End'].values
+    foot_sides = behavior_df['Foot (L/R)'].values
 
-def load_behavioral_data(file_path: str) -> pd.DataFrame:
-    """
-    Load behavioral data from Excel file.
+    # Create label array
+    num_frames = neural_data['calcium_signal'].shape[0]
+    labels = np.zeros(num_frames)
 
-    Parameters
-    ----------
-    file_path : str
-        Path to the Excel file
+    # Binary task: 0 for No footstep, 1 for RIGHT foot (contralateral) only
+    for i in range(len(frame_starts)):
+        start = int(frame_starts[i])
+        end = int(frame_ends[i])
 
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame containing behavioral data with standardized column names
-    """
-    logger.info(f"Loading behavioral data from {file_path}")
+        if start < num_frames and end < num_frames:
+            # Only label RIGHT foot (contralateral) as 1
+            if foot_sides[i] == 'R':
+                labels[start:end + 1] = 1
 
-    try:
-        behavior_df = pd.read_excel(file_path)
+    # Count instances of each class
+    class_counts = np.bincount(labels.astype(int))
+    logger.info(f"Label distribution:")
+    logger.info(f"No footstep (0): {class_counts[0]} frames")
+    logger.info(f"Right foot (1): {class_counts[1]} frames")
 
-        # Check and standardize column names
-        required_columns = ['Frame Start', 'Frame End', 'Foot (L/R)']
-        for col in required_columns:
-            if col not in behavior_df.columns:
-                logger.warning(f"Required column '{col}' not found in the Excel file.")
+    neural_data['labels'] = labels
+    return neural_data
 
-                # Try to detect similar columns and rename them
-                if col == 'Frame Start' and 'Start' in behavior_df.columns:
-                    behavior_df['Frame Start'] = behavior_df['Start']
-                    logger.info(f"Renamed 'Start' to 'Frame Start'")
-
-                elif col == 'Frame End' and 'End' in behavior_df.columns:
-                    behavior_df['Frame End'] = behavior_df['End']
-                    logger.info(f"Renamed 'End' to 'Frame End'")
-
-                elif col == 'Foot (L/R)' and 'Foot' in behavior_df.columns:
-                    behavior_df['Foot (L/R)'] = behavior_df['Foot']
-                    logger.info(f"Renamed 'Foot' to 'Foot (L/R)'")
-
-                else:
-                    logger.error(f"Could not find or infer column '{col}'")
-                    raise ValueError(f"Required column '{col}' not found in the Excel file")
-
-        logger.info(f"Successfully loaded behavioral data with {len(behavior_df)} entries")
-        logger.info(f"Columns in behavioral data: {behavior_df.columns.tolist()}")
-
-        return behavior_df
-
-    except Exception as e:
-        logger.error(f"Error loading behavioral data: {e}")
-        raise
 
 def align_neural_behavioral_data(neural_data, behavior_df, binary_task=True):
     """Align neural recording frames with behavioral events with binary option."""

@@ -92,32 +92,8 @@ def plot_raw_signals(
 
     return figures
 
-
-def plot_signal_heatmaps(
-        data: Dict[str, np.ndarray],
-        signal_types: List[str] = ['calcium', 'deltaf', 'deconv'],
-        num_neurons: int = 250,
-        output_dir: Optional[str] = None
-) -> Dict[str, plt.Figure]:
-    """
-    Plot signal heatmaps for each signal type without grids.
-
-    Parameters
-    ----------
-    data : Dict[str, np.ndarray]
-        Dictionary containing raw data
-    signal_types : List[str], optional
-        List of signal types to plot
-    num_neurons : int, optional
-        Number of neurons to include in heatmap
-    output_dir : Optional[str], optional
-        Output directory, by default None
-
-    Returns
-    -------
-    Dict[str, plt.Figure]
-        Dictionary containing signal heatmap figures
-    """
+def plot_signal_heatmaps(data, signal_types=['calcium', 'deltaf', 'deconv'], num_neurons=250, output_dir=None):
+    """Plot signal heatmaps for each signal type without any grids."""
     logger.info("Plotting signal heatmaps without grids")
 
     # Initialize figures dictionary
@@ -151,12 +127,12 @@ def plot_signal_heatmaps(
                     # Randomly select neurons
                     np.random.seed(42)
                     selected_neurons = np.random.choice(raw_data.shape[1], min(num_neurons, raw_data.shape[1]),
-                                                        replace=False)
+                                                      replace=False)
             else:
                 # Randomly select neurons
                 np.random.seed(42)
                 selected_neurons = np.random.choice(raw_data.shape[1], min(num_neurons, raw_data.shape[1]),
-                                                    replace=False)
+                                                  replace=False)
         else:
             # Randomly select neurons
             np.random.seed(42)
