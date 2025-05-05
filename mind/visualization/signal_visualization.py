@@ -92,7 +92,6 @@ def plot_raw_signals(
 
     return figures
 
-
 def plot_signal_heatmaps(
         data: Dict[str, np.ndarray],
         signal_types: List[str] = ['calcium', 'deltaf', 'deconv'],
@@ -100,7 +99,7 @@ def plot_signal_heatmaps(
         output_dir: Optional[str] = None
 ) -> Dict[str, plt.Figure]:
     """
-    Plot signal heatmaps for each signal type.
+    Plot signal heatmaps for each signal type without grids.
 
     Parameters
     ----------
@@ -118,7 +117,7 @@ def plot_signal_heatmaps(
     Dict[str, plt.Figure]
         Dictionary containing signal heatmap figures
     """
-    logger.info("Plotting signal heatmaps")
+    logger.info("Plotting signal heatmaps without grids")
 
     # Initialize figures dictionary
     figures = {}
@@ -135,7 +134,7 @@ def plot_signal_heatmaps(
         # Get raw data
         raw_data = data[raw_key]
 
-        # Select neurons
+        # Select neurons - prioritize using top neurons from feature importance
         if 'feature_importance' in data:
             # Try to get top neurons from feature importance
             fi_key = f"{signal_type}_rf"
@@ -165,16 +164,17 @@ def plot_signal_heatmaps(
         # Create figure
         fig, ax = plt.subplots(figsize=(15, 10))
 
-        # Plot heatmap
-        im = ax.imshow(selected_data.T, aspect='auto', cmap='viridis')
+        # Plot heatmap without grid
+        im = ax.imshow(selected_data.T, aspect='auto', cmap='viridis', interpolation='none')
 
         # Set title and labels
-        ax.set_title(f'{signal_type.capitalize()} Signal Heatmap - Top {len(selected_neurons)} Neurons')
-        ax.set_xlabel('Time Frame')
-        ax.set_ylabel('Neuron Index')
+        ax.set_title(f'{signal_type.capitalize()} Signal Heatmap - Top {len(selected_neurons)} Neurons', fontsize=14)
+        ax.set_xlabel('Time Frame', fontsize=12)
+        ax.set_ylabel('Neuron Index', fontsize=12)
 
         # Add colorbar
-        plt.colorbar(im, ax=ax)
+        cbar = plt.colorbar(im, ax=ax)
+        cbar.set_label('Signal Intensity')
 
         # Save figure if output_dir is provided
         if output_dir:
