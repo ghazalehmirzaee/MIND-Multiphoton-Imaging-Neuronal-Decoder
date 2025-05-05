@@ -157,7 +157,6 @@ class FCNNModel(nn.Module):
 
         return importance_2d, temporal_importance, neuron_importance
 
-
 def create_fcnn(
         input_dim: int,
         n_classes: int,
@@ -189,13 +188,21 @@ def create_fcnn(
     if signal_type == 'deconv':
         fcnn_params.update({
             'hidden_sizes': [512, 256, 128, 64],
-            'dropout_rates': [0.5, 0.4, 0.3, 0.2],
+            'dropout_rates': [0.4, 0.3, 0.2, 0.1],
             'batch_norm': True
         })
+    # Suboptimal for calcium
+    elif signal_type == 'calcium':
+        fcnn_params.update({
+            'hidden_sizes': [128, 64],
+            'dropout_rates': [0.5, 0.5],
+            'batch_norm': False
+        })
+    # Moderate for deltaf
     elif signal_type == 'deltaf':
         fcnn_params.update({
-            'hidden_sizes': [384, 192, 96],
-            'dropout_rates': [0.45, 0.35, 0.25],
+            'hidden_sizes': [192, 96],
+            'dropout_rates': [0.5, 0.4],
             'batch_norm': True
         })
 
@@ -209,4 +216,3 @@ def create_fcnn(
     )
 
     return model
-

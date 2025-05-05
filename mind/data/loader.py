@@ -150,6 +150,7 @@ def align_neural_behavioral_data(neural_data, behavior_df, binary_task=True):
 
     return neural_data
 
+
 def load_processed_data(file_path: str = None) -> Dict[str, Any]:
     """
     Load preprocessed data from NPZ file.

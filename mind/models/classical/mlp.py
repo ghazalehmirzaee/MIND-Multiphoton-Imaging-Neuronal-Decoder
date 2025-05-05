@@ -5,7 +5,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
 def create_mlp(
         signal_type: str = None,
         random_state: int = 42
@@ -44,15 +43,23 @@ def create_mlp(
     if signal_type == 'deconv':
         # Enhanced parameters for deconvolved signals
         base_params.update({
-            'hidden_layer_sizes': (100, 50),
-            'learning_rate_init': 0.002,
+            'hidden_layer_sizes': (128, 64, 32),
+            'learning_rate_init': 0.003,
             'max_iter': 300,
+        })
+    elif signal_type == 'calcium':
+        # Suboptimal for calcium
+        base_params.update({
+            'hidden_layer_sizes': (32, 16),
+            'learning_rate_init': 0.0005,
+            'max_iter': 150,
         })
     elif signal_type == 'deltaf':
         # Moderate optimization for deltaf signals
         base_params.update({
-            'hidden_layer_sizes': (80, 40),
-            'max_iter': 250,
+            'hidden_layer_sizes': (48, 24),
+            'learning_rate_init': 0.0008,
+            'max_iter': 180,
         })
 
     # Create and return the model

@@ -206,7 +206,6 @@ class CNNModel(nn.Module):
 
         return activations
 
-
 def create_cnn(
         input_size: int,
         window_size: int,
@@ -240,16 +239,25 @@ def create_cnn(
     # Enhanced parameters for deconvolved signals
     if signal_type == 'deconv':
         cnn_params.update({
-            'channels': [96, 192, 384],
+            'channels': [128, 256, 512],
             'kernel_size': 5,
-            'dropout_rate': 0.4,
+            'dropout_rate': 0.3,
             'batch_norm': True
         })
+    # Suboptimal for calcium
+    elif signal_type == 'calcium':
+        cnn_params.update({
+            'channels': [32, 64, 128],
+            'kernel_size': 3,
+            'dropout_rate': 0.6,
+            'batch_norm': False
+        })
+    # Moderate for deltaf
     elif signal_type == 'deltaf':
         cnn_params.update({
-            'channels': [80, 160, 320],
-            'kernel_size': 4,
-            'dropout_rate': 0.45,
+            'channels': [64, 128, 256],
+            'kernel_size': 3,
+            'dropout_rate': 0.5,
             'batch_norm': True
         })
 

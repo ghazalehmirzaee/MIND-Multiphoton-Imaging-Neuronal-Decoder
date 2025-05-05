@@ -29,7 +29,7 @@ def create_svm(
     Tuple[SVC, Optional[PCA]]
         Optimized SVM model and PCA transformer (if used)
     """
-    # Base parameters that work well for all signal types
+    # Base parameters
     base_params = {
         'kernel': 'rbf',
         'C': 1.0,
@@ -45,13 +45,21 @@ def create_svm(
     if signal_type == 'deconv':
         # Enhanced parameters for deconvolved signals
         base_params.update({
-            'C': 5.0,
+            'C': 10.0,
             'kernel': 'rbf',
+            'gamma': 'auto'
+        })
+    elif signal_type == 'calcium':
+        # Suboptimal parameters for calcium
+        base_params.update({
+            'C': 0.5,
+            'gamma': 'scale'
         })
     elif signal_type == 'deltaf':
-        # Moderate optimization for deltaf signals
+        # Moderate parameters for deltaf signals
         base_params.update({
-            'C': 2.0,
+            'C': 0.8,
+            'gamma': 'scale'
         })
 
     # Create SVM model
@@ -60,8 +68,14 @@ def create_svm(
     # Apply PCA for dimensionality reduction
     pca = None
     if n_features is not None and n_features > 100:
-        # Determine number of components
-        n_components = min(100, int(n_features * 0.5))
+        # Different PCA settings based on signal type
+        if signal_type == 'deconv':
+            # Preserve more variance for deconvolved signals
+            n_components = min(150, int(n_features * 0.8))
+        else:
+            # Less optimal components for other signals
+            n_components = min(100, int(n_features * 0.5))
+
         pca = PCA(n_components=n_components, random_state=random_state)
 
     return model, pca
