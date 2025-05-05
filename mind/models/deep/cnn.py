@@ -236,31 +236,6 @@ def create_cnn(
     """
     cnn_params = config['models']['deep']['cnn'].copy()
 
-    # Enhanced parameters for deconvolved signals
-    if signal_type == 'deconv':
-        cnn_params.update({
-            'channels': [128, 256, 512],
-            'kernel_size': 5,
-            'dropout_rate': 0.3,
-            'batch_norm': True
-        })
-    # Suboptimal for calcium
-    elif signal_type == 'calcium':
-        cnn_params.update({
-            'channels': [32, 64, 128],
-            'kernel_size': 3,
-            'dropout_rate': 0.6,
-            'batch_norm': False
-        })
-    # Moderate for deltaf
-    elif signal_type == 'deltaf':
-        cnn_params.update({
-            'channels': [64, 128, 256],
-            'kernel_size': 3,
-            'dropout_rate': 0.5,
-            'batch_norm': True
-        })
-
     model = CNNModel(
         input_size=input_size,
         window_size=window_size,
