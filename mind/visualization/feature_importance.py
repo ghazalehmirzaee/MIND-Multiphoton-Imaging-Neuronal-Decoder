@@ -9,6 +9,177 @@ import os
 logger = logging.getLogger(__name__)
 
 
+def plot_top_neurons_overlap(
+        feature_importance: Dict[str, Dict[str, np.ndarray]],
+        signal_types: List[str] = ['calcium', 'deltaf', 'deconv'],
+        model_type: str = 'rf',
+        num_neurons: int = 250,
+        output_dir: Optional[str] = None
+) -> Dict[str, plt.Figure]:
+    """
+    Create improved visualization of overlapping top neurons across signal types.
+
+    Parameters
+    ----------
+    feature_importance : Dict[str, Dict[str, np.ndarray]]
+        Dictionary containing feature importance data
+    signal_types : List[str], optional
+        List of signal types to compare, by default ['calcium', 'deltaf', 'deconv']
+    model_type : str, optional
+        Model type to use for comparison, by default 'rf'
+    num_neurons : int, optional
+        Number of top neurons to include, by default 250
+    output_dir : Optional[str], optional
+        Output directory, by default None
+
+    Returns
+    -------
+    Dict[str, plt.Figure]
+        Dictionary containing overlap visualization figures
+    """
+    logger.info(f"Creating top neurons overlap visualization for {model_type} model")
+
+    # Initialize figures dictionary
+    figures = {}
+
+    # Extract top neurons for each signal type
+    top_neurons = {}
+    for signal_type in signal_types:
+        key = f"{signal_type}_{model_type}"
+        if key not in feature_importance:
+            logger.warning(f"Feature importance not found for {key}")
+            continue
+
+        if 'neuron_importance' not in feature_importance[key]:
+            logger.warning(f"Neuron importance not found in {key}")
+            continue
+
+        neuron_importance = feature_importance[key]['neuron_importance']
+        top_n = min(num_neurons, len(neuron_importance))
+        top_indices = np.argsort(neuron_importance)[-top_n:][::-1]  # Descending order
+        top_neurons[signal_type] = set(top_indices)
+
+    # Calculate overlaps between signal types
+    overlaps = {
+        'calcium_only': top_neurons.get('calcium', set()) -
+                        top_neurons.get('deltaf', set()) -
+                        top_neurons.get('deconv', set()),
+        'deltaf_only': top_neurons.get('deltaf', set()) -
+                       top_neurons.get('calcium', set()) -
+                       top_neurons.get('deconv', set()),
+        'deconv_only': top_neurons.get('deconv', set()) -
+                       top_neurons.get('calcium', set()) -
+                       top_neurons.get('deltaf', set()),
+        'calcium_deltaf': top_neurons.get('calcium', set()) &
+                          top_neurons.get('deltaf', set()) -
+                          top_neurons.get('deconv', set()),
+        'calcium_deconv': top_neurons.get('calcium', set()) &
+                          top_neurons.get('deconv', set()) -
+                          top_neurons.get('deltaf', set()),
+        'deltaf_deconv': top_neurons.get('deltaf', set()) &
+                         top_neurons.get('deconv', set()) -
+                         top_neurons.get('calcium', set()),
+        'all_three': top_neurons.get('calcium', set()) &
+                     top_neurons.get('deltaf', set()) &
+                     top_neurons.get('deconv', set())
+    }
+
+    # Create color-coded neuron index scatter plot
+    fig1, ax1 = plt.subplots(figsize=(15, 10))
+
+    # Define colors and offsets for each set
+    set_configs = {
+        'calcium_only': {'color': 'blue', 'y': 1, 'label': 'Calcium Only'},
+        'deltaf_only': {'color': 'green', 'y': 2, 'label': 'DeltaF Only'},
+        'deconv_only': {'color': 'red', 'y': 3, 'label': 'Deconv Only'},
+        'calcium_deltaf': {'color': 'cyan', 'y': 4, 'label': 'Calcium ∩ DeltaF'},
+        'calcium_deconv': {'color': 'magenta', 'y': 5, 'label': 'Calcium ∩ Deconv'},
+        'deltaf_deconv': {'color': 'yellow', 'y': 6, 'label': 'DeltaF ∩ Deconv'},
+        'all_three': {'color': 'black', 'y': 7, 'label': 'All Three'}
+    }
+
+    # Plot each set
+    for set_name, indices in overlaps.items():
+        if indices:
+            config = set_configs[set_name]
+            sorted_indices = sorted(indices)
+            ax1.scatter(sorted_indices, [config['y']] * len(sorted_indices),
+                        s=40, color=config['color'], alpha=0.7, label=f"{config['label']} ({len(indices)})")
+
+    # Set labels and title
+    ax1.set_xlabel('Neuron Index', fontsize=14)
+    ax1.set_yticks([config['y'] for _, config in set_configs.items()])
+    ax1.set_yticklabels([config['label'] for _, config in set_configs.items()])
+    ax1.set_title(f'Top {num_neurons} Neurons Overlap - {model_type.upper()} Model', fontsize=16)
+    ax1.grid(axis='x', linestyle='--', alpha=0.3)
+
+    # Add text annotations with counts
+    for set_name, indices in overlaps.items():
+        if indices:
+            config = set_configs[set_name]
+            ax1.text(-20, config['y'], f"({len(indices)})", ha='right', va='center',
+                     fontweight='bold', color=config['color'])
+
+    plt.tight_layout()
+
+    # Save figure if output_dir is provided
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+        fig_path = os.path.join(output_dir, f'{model_type}_top_neurons_overlap.png')
+        plt.savefig(fig_path, dpi=300)
+
+    figures[f'{model_type}_top_neurons_overlap'] = fig1
+
+    # Create a more detailed visualization for neuron indices by group
+    fig2, ax2 = plt.subplots(figsize=(16, 12))
+
+    # Create a color map for the neurons
+    neuron_colors = {}
+    max_neuron = 0
+
+    for set_name, indices in overlaps.items():
+        config = set_configs[set_name]
+        for idx in indices:
+            neuron_colors[idx] = config['color']
+            max_neuron = max(max_neuron, idx)
+
+    # Plot colored neuron indices
+    all_neurons = sorted(neuron_colors.keys())
+    y_positions = np.ones(len(all_neurons))
+    scatter = ax2.scatter(all_neurons, y_positions, c=[neuron_colors[n] for n in all_neurons],
+                          s=100, alpha=0.7)
+
+    # Create a custom legend
+    legend_elements = [
+        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=config['color'],
+                   markersize=10, label=f"{config['label']} ({len(indices)})")
+        for set_name, indices in overlaps.items() if indices
+    ]
+    ax2.legend(handles=legend_elements, loc='upper right', fontsize=12)
+
+    # Set labels and title
+    ax2.set_xlabel('Neuron Index', fontsize=14)
+    ax2.set_yticks([])
+    ax2.set_xlim(-10, max_neuron + 10)
+    ax2.set_title(f'Top {num_neurons} Neurons Index Distribution - {model_type.upper()} Model', fontsize=16)
+    ax2.grid(axis='x', linestyle='--', alpha=0.3)
+
+    # Add neuron count annotation
+    total_neurons = sum(len(indices) for indices in overlaps.values())
+    ax2.text(0.02, 0.95, f'Total unique neurons: {total_neurons}',
+             transform=ax2.transAxes, fontsize=12, fontweight='bold')
+
+    plt.tight_layout()
+
+    # Save figure if output_dir is provided
+    if output_dir:
+        fig_path = os.path.join(output_dir, f'{model_type}_top_neurons_indices.png')
+        plt.savefig(fig_path, dpi=300)
+
+    figures[f'{model_type}_top_neurons_indices'] = fig2
+
+    return figures
+
 def plot_feature_importance_heatmap(
         importance_2d: np.ndarray,
         title: str,
