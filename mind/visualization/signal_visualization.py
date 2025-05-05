@@ -92,6 +92,8 @@ def plot_raw_signals(
 
     return figures
 
+# In mind/visualization/signal_visualization.py - Update heatmap function to remove grids
+
 def plot_signal_heatmaps(
         data: Dict[str, np.ndarray],
         signal_types: List[str] = ['calcium', 'deltaf', 'deconv'],
@@ -106,9 +108,9 @@ def plot_signal_heatmaps(
     data : Dict[str, np.ndarray]
         Dictionary containing raw data
     signal_types : List[str], optional
-        List of signal types to plot, by default ['calcium', 'deltaf', 'deconv']
+        List of signal types to plot
     num_neurons : int, optional
-        Number of neurons to include in heatmap, by default 250
+        Number of neurons to include in heatmap
     output_dir : Optional[str], optional
         Output directory, by default None
 
@@ -168,9 +170,9 @@ def plot_signal_heatmaps(
         im = ax.imshow(selected_data.T, aspect='auto', cmap='viridis', interpolation='none')
 
         # Set title and labels
-        ax.set_title(f'{signal_type.capitalize()} Signal Heatmap - Top {len(selected_neurons)} Neurons', fontsize=14)
-        ax.set_xlabel('Time Frame', fontsize=12)
-        ax.set_ylabel('Neuron Index', fontsize=12)
+        ax.set_title(f'{signal_type.capitalize()} Signal Heatmap - Top {len(selected_neurons)} Neurons', fontsize=16)
+        ax.set_xlabel('Time Frame', fontsize=14)
+        ax.set_ylabel('Neuron Index', fontsize=14)
 
         # Add colorbar
         cbar = plt.colorbar(im, ax=ax)
