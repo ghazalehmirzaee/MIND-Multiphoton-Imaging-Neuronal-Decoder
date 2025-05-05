@@ -171,7 +171,6 @@ def calculate_class_weights(y_train: np.ndarray) -> Dict[int, float]:
     logger.info(f"Calculated class weights: {class_weights}")
     return class_weights
 
-
 def process_data(
         neural_data: Dict[str, np.ndarray],
         config: Dict[str, Any]
