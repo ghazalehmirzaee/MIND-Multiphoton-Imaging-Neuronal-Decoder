@@ -154,7 +154,6 @@ def calculate_model_comparison(metrics_list: List[Dict[str, Any]]) -> Dict[str, 
 
     return comparison
 
-
 def generate_metrics_report(
         results: Dict[str, Dict[str, Dict[str, Any]]],
         output_file: Optional[str] = None
@@ -290,3 +289,4 @@ def generate_metrics_report(
         logger.info(f"Binary classification metrics report saved to {output_file}")
 
     return report
+

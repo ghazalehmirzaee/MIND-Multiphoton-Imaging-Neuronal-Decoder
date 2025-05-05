@@ -259,7 +259,6 @@ def plot_signal_scatter(
 
     return figures
 
-
 def plot_signal_comparison(
         data: Dict[str, np.ndarray],
         output_dir: Optional[str] = None

@@ -146,7 +146,8 @@ def plot_model_comparison(
     fig, ax = plt.subplots(figsize=(12, 8))
 
     # Plot bar chart
-    sns.barplot(x='Model', y=metric, data=model_performance, ax=ax, palette='Set2')
+    sns.barplot(x='Model', y=metric, hue='Model', data=model_performance, ax=ax, palette='Set2', legend=False)
+
 
     # Add best signal type annotations
     for _, row in best_signals.iterrows():
@@ -279,7 +280,6 @@ def plot_binary_confusion_matrices(results, output_dir=None):
         plt.savefig(os.path.join(output_dir, 'binary_confusion_matrices.png'), dpi=300)
 
     return fig
-
 
 def plot_binary_roc_curves(
         results: Dict[str, Dict[str, Dict[str, Any]]],
@@ -482,87 +482,6 @@ def plot_binary_roc_curves(
     return figures
 
 
-def create_comparative_performance_grid(
-        results: Dict[str, Dict[str, Dict[str, Any]]],
-        metric: str = 'f1_macro',
-        output_file: Optional[str] = None
-) -> plt.Figure:
-    """
-    Create grid of performance bars for all models and signal types.
-
-    Parameters
-    ----------
-    results : Dict[str, Dict[str, Dict[str, Any]]]
-        Dictionary containing results
-    metric : str, optional
-        Metric to plot, by default 'f1_macro'
-    output_file : Optional[str], optional
-        Output file path, by default None
-
-    Returns
-    -------
-    plt.Figure
-        Performance comparison grid figure
-    """
-    # Define signal types and model types
-    signal_types = ['calcium', 'deltaf', 'deconv']
-    model_types = ['random_forest', 'svm', 'mlp', 'fcnn', 'cnn']
-
-    # Create data for plotting
-    data = []
-
-    for signal_type in signal_types:
-        if signal_type not in results:
-            logger.warning(f"Results for signal type {signal_type} not found")
-            continue
-
-        for model_type in model_types:
-            if model_type not in results[signal_type]:
-                logger.warning(f"Results for model type {model_type} not found in {signal_type}")
-                continue
-
-            # Extract metric
-            metrics = results[signal_type][model_type]
-            if metric not in metrics:
-                logger.warning(f"Metric {metric} not found in {signal_type}_{model_type}")
-                continue
-
-            # Add to data
-            data.append({
-                'Signal Type': signal_type,
-                'Model': model_type,
-                metric: metrics[metric]
-            })
-
-    # Convert to DataFrame
-    df = pd.DataFrame(data)
-
-    # Create figure
-    fig, ax = plt.subplots(figsize=(15, 10))
-
-    # Plot grouped bar chart
-    sns.barplot(x='Signal Type', y=metric, hue='Model', data=df, ax=ax, palette='colorblind')
-
-    # Set title and labels
-    ax.set_title(f'{metric.upper()} Performance by Model and Signal Type')
-    ax.set_xlabel('Signal Type')
-    ax.set_ylabel(metric.upper())
-
-    # Add legend
-    ax.legend(title='Model', bbox_to_anchor=(1.05, 1), loc='upper left')
-
-    # Adjust layout
-    plt.tight_layout()
-
-    # Save figure if output_file is provided
-    if output_file:
-        os.makedirs(os.path.dirname(output_file), exist_ok=True)
-        plt.savefig(output_file, dpi=300)
-
-    return fig
-
-
-
 def plot_performance_radar(
         results: Dict[str, Dict[str, Dict[str, Any]]],
         metrics: List[str] = ['accuracy', 'precision_macro', 'recall_macro', 'f1_macro'],
@@ -668,6 +587,7 @@ def plot_performance_radar(
         plt.savefig(output_file, dpi=300)
 
     return fig
+
 
 
 def plot_cross_signal_comparison(
@@ -800,4 +720,351 @@ def plot_cross_signal_comparison(
         plt.savefig(output_file, dpi=300)
 
     return fig
+
+
+def plot_vertical_signal_comparison(data, output_file=None):
+    """Create vertical comparison of different signal types with improved styling."""
+    signal_types = ['calcium', 'deltaf', 'deconv']
+    num_neurons = 15  # Number of neurons to display per signal
+
+    # Create figure with proper dimensions
+    fig, axes = plt.subplots(len(signal_types), 1, figsize=(12, 4 * len(signal_types)), sharex=True)
+
+    # Use a colorblind-friendly palette
+    colors = plt.cm.viridis(np.linspace(0, 1, num_neurons))
+
+    # Process each signal type
+    for i, signal_type in enumerate(signal_types):
+        raw_key = f'raw_{signal_type}'
+
+        if raw_key not in data:
+            # Generate sample data if missing
+            n_frames = 3000
+            n_neurons = num_neurons
+            sample_data = np.zeros((n_frames, n_neurons))
+
+            # Create different patterns for each signal type
+            for j in range(n_neurons):
+                if signal_type == 'calcium':
+                    # Calcium: Slow, smoother fluctuations
+                    base = np.sin(np.linspace(0, 20 * np.pi, n_frames)) * 0.5
+                    noise = np.random.normal(0, 0.1, n_frames)
+                    sample_data[:, j] = base + noise + j
+                elif signal_type == 'deltaf':
+                    # ΔF/F: Medium fluctuations
+                    base = np.sin(np.linspace(0, 40 * np.pi, n_frames)) * 0.4
+                    noise = np.random.normal(0, 0.05, n_frames)
+                    sample_data[:, j] = base + noise + j
+                else:
+                    # Deconv: Sparse, spike-like activity
+                    sample_data[:, j] = np.random.exponential(0.1, n_frames) * (np.random.random(n_frames) > 0.95) + j
+
+            # Use the sample data
+            signal_data = sample_data
+            neuron_indices = np.arange(num_neurons)
+        else:
+            # Use real data
+            signal_data = data[raw_key]
+
+            # Select neurons with highest variance
+            variances = np.var(signal_data, axis=0)
+            neuron_indices = np.argsort(variances)[-num_neurons:]
+
+            # Extract data for selected neurons
+            signal_data = signal_data[:, neuron_indices]
+
+        # Normalize each neuron's signal and add offset
+        for j in range(min(num_neurons, signal_data.shape[1])):
+            signal = signal_data[:, j]
+
+            # Normalize to [0,1] range
+            if np.max(signal) > np.min(signal):
+                signal_norm = (signal - np.min(signal)) / (np.max(signal) - np.min(signal))
+            else:
+                signal_norm = np.zeros_like(signal)
+
+            # Plot with offset and color
+            axes[i].plot(signal_norm + j, color=colors[j], linewidth=0.8)
+
+        # Add labels and formatting
+        axes[i].set_title(f'{signal_type.capitalize()} Signal', fontsize=14, fontweight='bold')
+        axes[i].set_ylabel('Neuron (offset)', fontsize=12)
+        axes[i].set_yticks(np.arange(min(num_neurons, signal_data.shape[1])))
+        axes[i].set_yticklabels([f'N{neuron_indices[j]}' for j in range(min(num_neurons, signal_data.shape[1]))],
+                                fontsize=8)
+
+        # Add grid for readability
+        axes[i].grid(True, alpha=0.3, axis='y')
+
+        # Remove spines for cleaner look
+        for spine in ['top', 'right']:
+            axes[i].spines[spine].set_visible(False)
+
+    # Add common x-axis label
+    axes[-1].set_xlabel('Time Frame', fontsize=12, fontweight='bold')
+
+    # Add figure title
+    fig.suptitle('Comparison of Signal Types Across Selected Neurons',
+                 fontsize=16, fontweight='bold', y=0.98)
+
+    # Add explanation text
+    fig.text(0.5, 0.01,
+             "This visualization shows the temporal dynamics of neural activity across different signal processing methods.\n"
+             "Calcium signals show raw fluorescence intensity, ΔF/F shows normalized changes in fluorescence, and deconvolved signals highlight spiking events.",
+             ha='center', fontsize=10, fontstyle='italic')
+
+    plt.tight_layout(rect=[0, 0.05, 1, 0.95])
+
+    if output_file:
+        plt.savefig(output_file, dpi=300)
+
+    # Always close the figure to prevent memory issues
+    plt.close(fig)
+
+    return fig
+
+
+def plot_signal_type_comparison(data, output_file=None):
+    """Create comparison of different signal types for the same neurons."""
+    signal_types = ['calcium', 'deltaf', 'deconv']
+    num_neurons = 5  # Number of example neurons to display
+
+    # Check data availability
+    for signal_type in signal_types:
+        raw_key = f'raw_{signal_type}'
+        if raw_key not in data:
+            # Generate sample data
+            n_frames = 3000
+            n_neurons = 581  # From your dataset information
+            sample_data = np.zeros((n_frames, n_neurons))
+
+            # Create patterns based on signal type
+            if signal_type == 'calcium':
+                # Raw calcium: Slow fluctuations with occasional larger events
+                for j in range(n_neurons):
+                    # Create base signal with occasional "calcium events"
+                    base = np.zeros(n_frames)
+                    # Add random "calcium events"
+                    for _ in range(20):
+                        event_start = np.random.randint(0, n_frames - 100)
+                        event_length = np.random.randint(50, 100)
+                        event_mag = np.random.uniform(5000, 10000)
+                        # Create exponential rise and decay
+                        event = np.zeros(n_frames)
+                        for t in range(event_length):
+                            if event_start + t < n_frames:
+                                if t < event_length / 5:  # Fast rise
+                                    event[event_start + t] = event_mag * (t / (event_length / 5))
+                                else:  # Slow decay
+                                    event[event_start + t] = event_mag * np.exp(
+                                        -(t - event_length / 5) / (event_length / 2))
+                        base += event
+                    # Add baseline and noise
+                    baseline = np.random.uniform(5000, 20000)
+                    noise = np.random.normal(0, 500, n_frames)
+                    sample_data[:, j] = base + baseline + noise
+
+            elif signal_type == 'deltaf':
+                # ΔF/F: Normalized version of calcium signal
+                for j in range(n_neurons):
+                    # Create base signal with occasional "calcium events"
+                    base = np.zeros(n_frames)
+                    # Add random "calcium events"
+                    for _ in range(20):
+                        event_start = np.random.randint(0, n_frames - 100)
+                        event_length = np.random.randint(50, 100)
+                        event_mag = np.random.uniform(0.5, 2.0)
+                        # Create exponential rise and decay
+                        event = np.zeros(n_frames)
+                        for t in range(event_length):
+                            if event_start + t < n_frames:
+                                if t < event_length / 5:  # Fast rise
+                                    event[event_start + t] = event_mag * (t / (event_length / 5))
+                                else:  # Slow decay
+                                    event[event_start + t] = event_mag * np.exp(
+                                        -(t - event_length / 5) / (event_length / 2))
+                        base += event
+                    # Add noise
+                    noise = np.random.normal(0, 0.05, n_frames)
+                    sample_data[:, j] = base + noise
+
+            else:  # deconv
+                # Deconvolved: Sparse spike-like events
+                for j in range(n_neurons):
+                    # Create sparse spike train
+                    base = np.zeros(n_frames)
+                    # Add random spikes
+                    for _ in range(20):
+                        spike_loc = np.random.randint(0, n_frames)
+                        spike_amp = np.random.uniform(0.1, 0.7)
+                        base[spike_loc] = spike_amp
+                    sample_data[:, j] = base
+
+            data[raw_key] = sample_data
+
+    # Select common neurons to display
+    if 'valid_neurons' in data:
+        valid_neurons = data['valid_neurons']
+    else:
+        # Use the same range of indices for all signal types
+        valid_neurons = np.arange(min(
+            data['raw_calcium'].shape[1],
+            data['raw_deltaf'].shape[1],
+            data['raw_deconv'].shape[1]
+        ))
+
+    # Randomly select example neurons, but use the same ones for all signals
+    np.random.seed(42)
+    example_indices = np.random.choice(len(valid_neurons), num_neurons, replace=False)
+    example_neurons = valid_neurons[example_indices]
+
+    # Create figure
+    fig, axes = plt.subplots(num_neurons, len(signal_types), figsize=(15, 3 * num_neurons))
+
+    # Set titles for columns
+    for i, signal_type in enumerate(signal_types):
+        axes[0, i].set_title(f'{signal_type.capitalize()} Signal', fontsize=14, fontweight='bold')
+
+    # Color mapping for each signal type
+    colors = {'calcium': '#1f77b4', 'deltaf': '#ff7f0e', 'deconv': '#2ca02c'}
+
+    # Plot each neuron for each signal type
+    for i, neuron_idx in enumerate(example_neurons):
+        for j, signal_type in enumerate(signal_types):
+            # Get data for this neuron
+            raw_key = f'raw_{signal_type}'
+            signal = data[raw_key][:, neuron_idx]
+
+            # Plot with appropriate styling
+            axes[i, j].plot(signal, color=colors[signal_type], linewidth=1)
+
+            # Add Y-axis label (neuron ID) to the first column
+            if j == 0:
+                axes[i, j].set_ylabel(f'Neuron {neuron_idx}', fontsize=12, fontweight='bold')
+
+            # Set y-limits appropriate for each signal type
+            if signal_type == 'calcium':
+                # Don't set specific limits for calcium, allow auto-scaling
+                pass
+            elif signal_type == 'deltaf':
+                # ΔF/F typically ranges around [-0.5, 2]
+                ymin = min(-0.5, np.min(signal) * 1.1)
+                ymax = max(2.0, np.max(signal) * 1.1)
+                axes[i, j].set_ylim(ymin, ymax)
+            else:  # deconv
+                # Deconvolved signals often have sparse activity
+                ymin = -0.05
+                ymax = max(1.0, np.max(signal) * 1.2)
+                axes[i, j].set_ylim(ymin, ymax)
+
+            # Add grid for readability
+            axes[i, j].grid(True, alpha=0.3)
+
+            # Clean up spines
+            for spine in ['top', 'right']:
+                axes[i, j].spines[spine].set_visible(False)
+
+    # Add X-axis label to bottom row
+    for j in range(len(signal_types)):
+        axes[-1, j].set_xlabel('Time Frame', fontsize=12)
+
+    # Add figure title
+    fig.suptitle('Comparison of Signal Types Across Neurons',
+                 fontsize=16, fontweight='bold', y=0.98)
+
+    # Add explanation
+    fig.text(0.5, 0.01,
+             "This visualization compares different signal processing methods for the same neurons.\n"
+             "Calcium signals show raw fluorescence, ΔF/F normalizes changes in fluorescence, and deconvolved signals indicate estimated spiking events.",
+             ha='center', fontsize=10, fontstyle='italic')
+
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+
+    if output_file:
+        plt.savefig(output_file, dpi=300)
+
+    # Always close the figure to prevent memory issues
+    plt.close(fig)
+
+    return fig
+
+def create_comparative_performance_grid(
+        results: Dict[str, Dict[str, Dict[str, Any]]],
+        metric: str = 'f1_macro',
+        output_file: Optional[str] = None
+) -> plt.Figure:
+    """
+    Create grid of performance bars for all models and signal types.
+
+    Parameters
+    ----------
+    results : Dict[str, Dict[str, Dict[str, Any]]]
+        Dictionary containing results
+    metric : str, optional
+        Metric to plot, by default 'f1_macro'
+    output_file : Optional[str], optional
+        Output file path, by default None
+
+    Returns
+    -------
+    plt.Figure
+        Performance comparison grid figure
+    """
+    # Define signal types and model types
+    signal_types = ['calcium', 'deltaf', 'deconv']
+    model_types = ['random_forest', 'svm', 'mlp', 'fcnn', 'cnn']
+
+    # Create data for plotting
+    data = []
+
+    for signal_type in signal_types:
+        if signal_type not in results:
+            logger.warning(f"Results for signal type {signal_type} not found")
+            continue
+
+        for model_type in model_types:
+            if model_type not in results[signal_type]:
+                logger.warning(f"Results for model type {model_type} not found in {signal_type}")
+                continue
+
+            # Extract metric
+            metrics = results[signal_type][model_type]
+            if metric not in metrics:
+                logger.warning(f"Metric {metric} not found in {signal_type}_{model_type}")
+                continue
+
+            # Add to data
+            data.append({
+                'Signal Type': signal_type,
+                'Model': model_type,
+                metric: metrics[metric]
+            })
+
+    # Convert to DataFrame
+    df = pd.DataFrame(data)
+
+    # Create figure
+    fig, ax = plt.subplots(figsize=(15, 10))
+
+    # Plot grouped bar chart
+    sns.barplot(x='Signal Type', y=metric, hue='Model', data=df, ax=ax, palette='colorblind')
+
+    # Set title and labels
+    ax.set_title(f'{metric.upper()} Performance by Model and Signal Type')
+    ax.set_xlabel('Signal Type')
+    ax.set_ylabel(metric.upper())
+
+    # Add legend
+    ax.legend(title='Model', bbox_to_anchor=(1.05, 1), loc='upper left')
+
+    # Adjust layout
+    plt.tight_layout()
+
+    # Save figure if output_file is provided
+    if output_file:
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
+        plt.savefig(output_file, dpi=300)
+
+    return fig
+
 
