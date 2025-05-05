@@ -53,7 +53,6 @@ def train_random_forest(X_train, y_train, X_val, y_val, config, optimize=True, c
 
     return model, metrics
 
-
 def train_svm(
         X_train: np.ndarray,
         y_train: np.ndarray,
