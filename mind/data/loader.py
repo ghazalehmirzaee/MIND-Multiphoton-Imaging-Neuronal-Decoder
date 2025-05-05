@@ -108,8 +108,6 @@ def load_behavioral_data(file_path: str) -> pd.DataFrame:
         logger.error(f"Error loading behavioral data: {e}")
         raise
 
-
-# In mind/data/processor.py
 def align_neural_behavioral_data(neural_data, behavior_df, binary_task=True):
     """Align neural recording frames with behavioral events with binary option."""
     # Extract frame information
