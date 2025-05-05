@@ -460,7 +460,6 @@ def plot_signal_vertical_comparison(
 
     return fig
 
-
 def create_signal_visualizations(
         data: Dict[str, Any],
         output_dir: str = 'results/figures'

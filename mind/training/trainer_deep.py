@@ -133,6 +133,38 @@ def train_fcnn_model(
     """
     logger.info(f"Training FCNN model for {signal_type} signal")
 
+def train_random_forest(X_train, y_train, X_val, y_val, config, optimize=True, class_weights=None, signal_type=None):
+    """Train a Random Forest model for binary classification."""
+    logger.info(f"Training Random Forest for {signal_type if signal_type else 'general'} data")
+
+    # Create model
+    model = create_random_forest(signal_type, config['experiment'].get('seed', 42))
+
+    # Apply class weights if provided
+    if class_weights is not None:
+        model.class_weight = class_weights
+
+    # Train model - convert to binary classification
+    model.fit(X_train, y_train.astype(int))
+
+    # Evaluate model
+    y_pred = model.predict(X_val)
+    y_prob = model.predict_proba(X_val)
+
+    # Calculate metrics
+    metrics = {
+        'accuracy': accuracy_score(y_val, y_pred),
+        'precision_macro': precision_score(y_val, y_pred, average='macro', zero_division=0),
+        'recall_macro': recall_score(y_val, y_pred, average='macro', zero_division=0),
+        'f1_macro': f1_score(y_val, y_pred, average='macro', zero_division=0),
+        'predictions': y_pred,
+        'probabilities': y_prob,
+        'targets': y_val
+    }
+
+    return model, metrics
+
+
     # Create dataloaders
     dataloaders = create_dataloaders(
         data, signal_type,
@@ -476,11 +508,29 @@ def evaluate_deep_model(
     all_probs = np.concatenate(all_probs)
     all_targets = np.concatenate(all_targets)
 
+    # Ensure binary classification (0 vs 1)
+    if len(np.unique(all_targets)) > 2:
+        logger.warning(f"Converting multi-class targets to binary for {model_name}")
+        binary_targets = (all_targets > 0).astype(int)
+        all_targets = binary_targets
+
+        binary_preds = (all_preds > 0).astype(int)
+        all_preds = binary_preds
+
     # Calculate metrics
     accuracy = accuracy_score(all_targets, all_preds)
     precision_macro = precision_score(all_targets, all_preds, average='macro', zero_division=0)
     recall_macro = recall_score(all_targets, all_preds, average='macro', zero_division=0)
     f1_macro = f1_score(all_targets, all_preds, average='macro', zero_division=0)
+
+    # Calculate ROC AUC if applicable
+    roc_auc = None
+    if all_probs.shape[1] > 1:  # Multi-class case
+        try:
+            from sklearn.metrics import roc_auc_score
+            roc_auc = roc_auc_score(all_targets, all_probs[:, 1])
+        except Exception as e:
+            logger.warning(f"Could not calculate ROC AUC: {e}")
 
     # Store metrics
     metrics = {
@@ -493,21 +543,30 @@ def evaluate_deep_model(
         'targets': all_targets
     }
 
+    if roc_auc is not None:
+        metrics['roc_auc'] = roc_auc
+
     # Log metrics
     logger.info(f"{model_name} evaluation metrics:")
     logger.info(f"  Accuracy: {accuracy:.4f}")
     logger.info(f"  Precision (macro): {precision_macro:.4f}")
     logger.info(f"  Recall (macro): {recall_macro:.4f}")
     logger.info(f"  F1 (macro): {f1_macro:.4f}")
+    if roc_auc is not None:
+        logger.info(f"  ROC AUC: {roc_auc:.4f}")
 
     # Log metrics to Weights & Biases
     if wandb_run is not None:
-        log_metrics(wandb_run, {
+        metrics_to_log = {
             f"{model_name}_accuracy": accuracy,
             f"{model_name}_precision_macro": precision_macro,
             f"{model_name}_recall_macro": recall_macro,
             f"{model_name}_f1_macro": f1_macro
-        })
+        }
+        if roc_auc is not None:
+            metrics_to_log[f"{model_name}_roc_auc"] = roc_auc
+
+        log_metrics(wandb_run, metrics_to_log)
 
     return metrics
 
