@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import logging
 import wandb
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional, Tuple, Callable
 
 from mind.data.loader import load_processed_data
 from mind.utils.logging import setup_logging
