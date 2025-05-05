@@ -263,7 +263,7 @@ def plot_binary_roc_curves(
         output_dir: Optional[str] = None
 ) -> Dict[str, plt.Figure]:
     """
-    Create ROC curves for binary classification tasks.
+    Create ROC curves for binary classification tasks, and handle multiclass data appropriately.
 
     Parameters
     ----------
@@ -288,6 +288,7 @@ def plot_binary_roc_curves(
             continue
 
         fig, ax = plt.subplots(figsize=(10, 8))
+        has_valid_curves = False  # Flag to track if we successfully plotted any curves
 
         for model_type in model_types:
             if model_type not in results[signal_type]:
@@ -302,68 +303,116 @@ def plot_binary_roc_curves(
             y_prob = metrics['probabilities']
             y_true = metrics['targets']
 
-            # For binary classification, use probability for class 1
-            if y_prob.shape[1] > 1:
-                y_prob_positive = y_prob[:, 1]
+            # Check if this is truly a binary classification problem
+            unique_classes = np.unique(y_true)
+            if len(unique_classes) > 2:
+                logger.warning(
+                    f"Detected multiclass data for {signal_type}_{model_type} with {len(unique_classes)} classes.")
+                logger.warning(
+                    f"ROC curves are primarily designed for binary classification. Converting to one-vs-rest.")
+
+                # Convert to one-vs-rest for the most common positive class
+                positive_class = 1  # Default to class 1 as positive
+
+                # For each class, create a binary problem
+                for cls in unique_classes:
+                    try:
+                        # Create binary labels (current class vs rest)
+                        y_true_binary = (y_true == cls).astype(int)
+
+                        # Get probability for the current class
+                        if y_prob.shape[1] > cls:
+                            y_prob_cls = y_prob[:, cls]
+                        else:
+                            logger.warning(f"Probability shape mismatch for class {cls}. Skipping.")
+                            continue
+
+                        # Calculate ROC curve
+                        fpr, tpr, _ = roc_curve(y_true_binary, y_prob_cls)
+                        roc_auc = auc(fpr, tpr)
+
+                        # Plot with custom styling
+                        line_styles = {
+                            'random_forest': '-', 'svm': '--', 'mlp': '-.', 'fcnn': ':', 'cnn': '-'
+                        }
+                        line_widths = {
+                            'random_forest': 2, 'svm': 2, 'mlp': 2, 'fcnn': 2.5, 'cnn': 2.5
+                        }
+                        colors = {
+                            'random_forest': 'blue', 'svm': 'green', 'mlp': 'red',
+                            'fcnn': 'purple', 'cnn': 'orange'
+                        }
+
+                        ax.plot(fpr, tpr,
+                                linestyle=line_styles.get(model_type, '-'),
+                                linewidth=line_widths.get(model_type, 2),
+                                color=colors.get(model_type, None),
+                                label=f'{model_type.upper()} Class {cls} (AUC = {roc_auc:.3f})')
+                        has_valid_curves = True
+                    except Exception as e:
+                        logger.warning(f"Error calculating ROC curve for {signal_type}_{model_type}, class {cls}: {e}")
+                        continue
             else:
-                y_prob_positive = y_prob
+                # Binary classification case
+                try:
+                    # For binary classification, use probability for class 1
+                    if y_prob.shape[1] > 1:
+                        y_prob_positive = y_prob[:, 1]
+                    else:
+                        y_prob_positive = y_prob
 
-            # Calculate ROC curve
-            fpr, tpr, _ = roc_curve(y_true, y_prob_positive)
-            roc_auc = auc(fpr, tpr)
+                    # Calculate ROC curve
+                    fpr, tpr, _ = roc_curve(y_true, y_prob_positive)
+                    roc_auc = auc(fpr, tpr)
 
-            # Plot ROC curve with customized line style and thickness
-            line_styles = {
-                'random_forest': '-',
-                'svm': '--',
-                'mlp': '-.',
-                'fcnn': ':',
-                'cnn': '-'
-            }
+                    # Plot with custom styling
+                    line_styles = {
+                        'random_forest': '-', 'svm': '--', 'mlp': '-.', 'fcnn': ':', 'cnn': '-'
+                    }
+                    line_widths = {
+                        'random_forest': 2, 'svm': 2, 'mlp': 2, 'fcnn': 2.5, 'cnn': 2.5
+                    }
+                    colors = {
+                        'random_forest': 'blue', 'svm': 'green', 'mlp': 'red',
+                        'fcnn': 'purple', 'cnn': 'orange'
+                    }
 
-            line_widths = {
-                'random_forest': 2,
-                'svm': 2,
-                'mlp': 2,
-                'fcnn': 2.5,
-                'cnn': 2.5
-            }
+                    ax.plot(fpr, tpr,
+                            linestyle=line_styles.get(model_type, '-'),
+                            linewidth=line_widths.get(model_type, 2),
+                            color=colors.get(model_type, None),
+                            label=f'{model_type.upper()} (AUC = {roc_auc:.3f})')
+                    has_valid_curves = True
+                except Exception as e:
+                    logger.warning(f"Error calculating ROC curve for {signal_type}_{model_type}: {e}")
+                    continue
 
-            colors = {
-                'random_forest': 'blue',
-                'svm': 'green',
-                'mlp': 'red',
-                'fcnn': 'purple',
-                'cnn': 'orange'
-            }
+        # Only save and return the figure if we were able to plot any valid curves
+        if has_valid_curves:
+            # Add reference line
+            ax.plot([0, 1], [0, 1], 'k--', lw=1.5)
 
-            # Plot with custom styling
-            ax.plot(fpr, tpr,
-                    linestyle=line_styles.get(model_type, '-'),
-                    linewidth=line_widths.get(model_type, 2),
-                    color=colors.get(model_type, None),
-                    label=f'{model_type.upper()} (AUC = {roc_auc:.3f})')
+            ax.set_title(f'ROC Curves - {signal_type.capitalize()} Signal', fontsize=14)
+            ax.set_xlabel('False Positive Rate', fontsize=12)
+            ax.set_ylabel('True Positive Rate', fontsize=12)
+            ax.set_xlim([0.0, 1.0])
+            ax.set_ylim([0.0, 1.05])
+            ax.legend(loc='lower right', fontsize=10)
+            ax.grid(alpha=0.3)
 
-        # Add reference line
-        ax.plot([0, 1], [0, 1], 'k--', lw=1.5)
+            if output_dir:
+                os.makedirs(output_dir, exist_ok=True)
+                plt.savefig(os.path.join(output_dir, f'{signal_type}_roc_curves.png'), dpi=300)
 
-        ax.set_title(f'ROC Curves - {signal_type.capitalize()} Signal', fontsize=14)
-        ax.set_xlabel('False Positive Rate', fontsize=12)
-        ax.set_ylabel('True Positive Rate', fontsize=12)
-        ax.set_xlim([0.0, 1.0])
-        ax.set_ylim([0.0, 1.05])
-        ax.legend(loc='lower right', fontsize=10)
-        ax.grid(alpha=0.3)
+            figures[f'{signal_type}_roc_curves'] = fig
+        else:
+            logger.warning(f"No valid ROC curves could be plotted for {signal_type}")
+            plt.close(fig)
 
-        if output_dir:
-            os.makedirs(output_dir, exist_ok=True)
-            plt.savefig(os.path.join(output_dir, f'{signal_type}_roc_curves.png'), dpi=300)
-
-        figures[f'{signal_type}_roc_curves'] = fig
-
-    # ROC curves by model type (comparing signal types)
+    # ROC curves by model type (comparing signal types) - similar improvements needed here
     for model_type in model_types:
         fig, ax = plt.subplots(figsize=(10, 8))
+        has_valid_curves = False
 
         for signal_type in signal_types:
             if signal_type not in results or model_type not in results[signal_type]:
@@ -376,41 +425,87 @@ def plot_binary_roc_curves(
             y_prob = metrics['probabilities']
             y_true = metrics['targets']
 
-            # For binary classification, use probability for class 1
-            if y_prob.shape[1] > 1:
-                y_prob_positive = y_prob[:, 1]
+            # Check if this is truly a binary classification problem
+            unique_classes = np.unique(y_true)
+            if len(unique_classes) > 2:
+                logger.warning(
+                    f"Detected multiclass data for {signal_type}_{model_type} with {len(unique_classes)} classes.")
+
+                # Use the first class as the positive class for one-vs-rest
+                positive_class = unique_classes[1] if len(unique_classes) > 1 else unique_classes[0]
+
+                # Create binary labels (positive_class vs rest)
+                y_true_binary = (y_true == positive_class).astype(int)
+
+                # Get probability for the positive class
+                if y_prob.shape[1] > positive_class:
+                    y_prob_positive = y_prob[:, positive_class]
+                else:
+                    logger.warning(f"Probability shape mismatch for {signal_type}_{model_type}. Skipping.")
+                    continue
+
+                try:
+                    # Calculate ROC curve
+                    fpr, tpr, _ = roc_curve(y_true_binary, y_prob_positive)
+                    roc_auc = auc(fpr, tpr)
+
+                    # Custom styling
+                    colors = {
+                        'calcium': 'blue', 'deltaf': 'green', 'deconv': 'red'
+                    }
+
+                    ax.plot(fpr, tpr, lw=2, color=colors.get(signal_type, None),
+                            label=f'{signal_type.capitalize()} Class {positive_class} (AUC = {roc_auc:.3f})')
+                    has_valid_curves = True
+                except Exception as e:
+                    logger.warning(f"Error calculating ROC curve for {signal_type}_{model_type}: {e}")
+                    continue
             else:
-                y_prob_positive = y_prob
+                # Binary classification case
+                try:
+                    # For binary classification, use probability for class 1
+                    if y_prob.shape[1] > 1:
+                        y_prob_positive = y_prob[:, 1]
+                    else:
+                        y_prob_positive = y_prob
 
-            # Calculate ROC curve
-            fpr, tpr, _ = roc_curve(y_true, y_prob_positive)
-            roc_auc = auc(fpr, tpr)
+                    # Calculate ROC curve
+                    fpr, tpr, _ = roc_curve(y_true, y_prob_positive)
+                    roc_auc = auc(fpr, tpr)
 
-            # Plot with custom styling
-            colors = {
-                'calcium': 'blue',
-                'deltaf': 'green',
-                'deconv': 'red'
-            }
+                    # Plot with custom styling
+                    colors = {
+                        'calcium': 'blue', 'deltaf': 'green', 'deconv': 'red'
+                    }
 
-            ax.plot(fpr, tpr, lw=2, color=colors.get(signal_type, None),
-                    label=f'{signal_type.capitalize()} (AUC = {roc_auc:.3f})')
+                    ax.plot(fpr, tpr, lw=2, color=colors.get(signal_type, None),
+                            label=f'{signal_type.capitalize()} (AUC = {roc_auc:.3f})')
+                    has_valid_curves = True
+                except Exception as e:
+                    logger.warning(f"Error calculating ROC curve for {signal_type}_{model_type}: {e}")
+                    continue
 
-        # Add reference line
-        ax.plot([0, 1], [0, 1], 'k--', lw=1.5)
+        # Only save and return the figure if we were able to plot any valid curves
+        if has_valid_curves:
+            # Add reference line
+            ax.plot([0, 1], [0, 1], 'k--', lw=1.5)
 
-        ax.set_title(f'ROC Curves - {model_type.upper()} Model', fontsize=14)
-        ax.set_xlabel('False Positive Rate', fontsize=12)
-        ax.set_ylabel('True Positive Rate', fontsize=12)
-        ax.set_xlim([0.0, 1.0])
-        ax.set_ylim([0.0, 1.05])
-        ax.legend(loc='lower right', fontsize=10)
-        ax.grid(alpha=0.3)
+            ax.set_title(f'ROC Curves - {model_type.upper()} Model', fontsize=14)
+            ax.set_xlabel('False Positive Rate', fontsize=12)
+            ax.set_ylabel('True Positive Rate', fontsize=12)
+            ax.set_xlim([0.0, 1.0])
+            ax.set_ylim([0.0, 1.05])
+            ax.legend(loc='lower right', fontsize=10)
+            ax.grid(alpha=0.3)
 
-        if output_dir:
-            plt.savefig(os.path.join(output_dir, f'{model_type}_roc_curves.png'), dpi=300)
+            if output_dir:
+                os.makedirs(output_dir, exist_ok=True)
+                plt.savefig(os.path.join(output_dir, f'{model_type}_roc_curves.png'), dpi=300)
 
-        figures[f'{model_type}_roc_curves'] = fig
+            figures[f'{model_type}_roc_curves'] = fig
+        else:
+            logger.warning(f"No valid ROC curves could be plotted for {model_type}")
+            plt.close(fig)
 
     return figures
 
