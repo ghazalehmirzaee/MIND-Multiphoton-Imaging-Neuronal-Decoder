@@ -6,14 +6,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 import json
 import time
+import datetime
 import wandb
+from omegaconf import DictConfig, OmegaConf
 
+# Set up logger
 logger = logging.getLogger(__name__)
 
 
 def log_metrics(
         wandb_run: Any,
-        metrics: Dict[str, float]
+        metrics: Dict[str, float],
+        step: Optional[int] = None
 ) -> None:
     """
     Log metrics to Weights & Biases.
@@ -24,14 +28,17 @@ def log_metrics(
         Weights & Biases run
     metrics : Dict[str, float]
         Dictionary containing metrics to log
+    step : Optional[int], optional
+        Step for logging metrics, by default None
     """
     if wandb_run is not None:
-        wandb_run.log(metrics)
+        wandb_run.log(metrics, step=step)
 
 
 def log_figures(
         wandb_run: Any,
-        figures: Dict[str, plt.Figure]
+        figures: Dict[str, plt.Figure],
+        step: Optional[int] = None
 ) -> None:
     """
     Log figures to Weights & Biases.
@@ -42,73 +49,66 @@ def log_figures(
         Weights & Biases run
     figures : Dict[str, plt.Figure]
         Dictionary containing figures to log
+    step : Optional[int], optional
+        Step for logging figures, by default None
     """
     if wandb_run is not None:
         for name, fig in figures.items():
-            wandb_run.log({name: wandb.Image(fig)})
+            wandb_run.log({name: wandb.Image(fig)}, step=step)
 
 
-def log_model(
+def log_artifact(
         wandb_run: Any,
-        model_path: str,
-        model_name: str
+        artifact_path: str,
+        artifact_name: str,
+        artifact_type: str = 'model'
 ) -> None:
     """
-    Log model to Weights & Biases.
+    Log artifact to Weights & Biases.
 
     Parameters
     ----------
     wandb_run : Any
         Weights & Biases run
-    model_path : str
-        Path to model file
-    model_name : str
-        Name of the model
+    artifact_path : str
+        Path to artifact file
+    artifact_name : str
+        Name of the artifact
+    artifact_type : str, optional
+        Type of the artifact, by default 'model'
     """
     if wandb_run is not None:
-        artifact = wandb.Artifact(
-            name=model_name,
-            type='model',
-            description=f'Trained {model_name} model'
-        )
-        artifact.add_file(model_path)
-        wandb_run.log_artifact(artifact)
+        try:
+            # Add timestamp to artifact name
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            full_artifact_name = f"{artifact_name}_{timestamp}"
 
+            # Create artifact
+            artifact = wandb.Artifact(
+                name=full_artifact_name,
+                type=artifact_type,
+                description=f'{artifact_name} {artifact_type}'
+            )
 
-def log_results(
-        wandb_run: Any,
-        results_path: str,
-        results_name: str
-) -> None:
-    """
-    Log results to Weights & Biases.
+            # Add file to artifact
+            artifact.add_file(artifact_path)
 
-    Parameters
-    ----------
-    wandb_run : Any
-        Weights & Biases run
-    results_path : str
-        Path to results file
-    results_name : str
-        Name of the results
-    """
-    if wandb_run is not None:
-        artifact = wandb.Artifact(
-            name=results_name,
-            type='results',
-            description=f'{results_name} results'
-        )
-        artifact.add_file(results_path)
-        wandb_run.log_artifact(artifact)
+            # Log artifact
+            wandb_run.log_artifact(artifact)
+
+            logger.info(f"Logged artifact {full_artifact_name} to W&B")
+        except Exception as e:
+            logger.error(f"Error logging artifact to W&B: {e}")
 
 
 def init_wandb(
         project_name: str,
         experiment_name: Optional[str] = None,
-        config: Optional[Dict[str, Any]] = None
+        config: Optional[Union[Dict[str, Any], DictConfig]] = None,
+        tags: Optional[List[str]] = None
 ) -> Any:
     """
-    Initialize Weights & Biases run.
+    Initialize Weights & Biases run with improved configuration handling.
 
     Parameters
     ----------
@@ -116,8 +116,10 @@ def init_wandb(
         Project name
     experiment_name : Optional[str], optional
         Experiment name, by default None
-    config : Optional[Dict[str, Any]], optional
+    config : Optional[Union[Dict[str, Any], DictConfig]], optional
         Configuration dictionary, by default None
+    tags : Optional[List[str]], optional
+        Tags for the run, by default None
 
     Returns
     -------
@@ -125,16 +127,26 @@ def init_wandb(
         Weights & Biases run object or None if initialization fails
     """
     try:
+        # Convert OmegaConf DictConfig to dict if needed
+        if config is not None and isinstance(config, DictConfig):
+            config_dict = OmegaConf.to_container(config, resolve=True)
+        else:
+            config_dict = config
+
         # Generate a unique experiment name if not provided
         if experiment_name is None:
-            experiment_name = f"experiment_{int(time.time())}"
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            experiment_name = f"experiment_{timestamp}"
 
         # Initialize run
         wandb_run = wandb.init(
             project=project_name,
             name=experiment_name,
-            config=config
+            config=config_dict,
+            tags=tags
         )
+
+        logger.info(f"Initialized W&B run: {experiment_name}")
         return wandb_run
     except Exception as e:
         logger.error(f"Error initializing W&B: {e}")
@@ -143,21 +155,41 @@ def init_wandb(
 
 
 def save_config(
-        config: Dict[str, Any],
-        output_file: str = 'config.json'
+        config: Union[Dict[str, Any], DictConfig],
+        output_file: str = 'config.json',
+        timestamp: bool = True
 ) -> None:
     """
-    Save configuration to JSON file.
+    Save configuration to JSON file with optional timestamp.
 
     Parameters
     ----------
-    config : Dict[str, Any]
-        Configuration dictionary
+    config : Union[Dict[str, Any], DictConfig]
+        Configuration dictionary or OmegaConf DictConfig
     output_file : str, optional
         Output file path, by default 'config.json'
+    timestamp : bool, optional
+        Whether to add timestamp to filename, by default True
     """
+    # Add timestamp to filename if requested
+    if timestamp:
+        dirname = os.path.dirname(output_file)
+        basename = os.path.basename(output_file)
+        name, ext = os.path.splitext(basename)
+
+        timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        new_basename = f"{name}_{timestamp_str}{ext}"
+
+        output_file = os.path.join(dirname, new_basename)
+
     # Create output directory
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
+
+    # Convert OmegaConf DictConfig to dict if needed
+    if isinstance(config, DictConfig):
+        config_dict = OmegaConf.to_container(config, resolve=True)
+    else:
+        config_dict = config
 
     # Convert numpy types to Python native types
     def convert_np_to_python(obj):
@@ -174,7 +206,7 @@ def save_config(
         else:
             return obj
 
-    config_json = convert_np_to_python(config)
+    config_json = convert_np_to_python(config_dict)
 
     # Save configuration to JSON file
     with open(output_file, 'w') as f:
@@ -208,5 +240,6 @@ def load_config(
     with open(input_file, 'r') as f:
         config = json.load(f)
 
+    logger.info(f"Configuration loaded from {input_file}")
     return config
 

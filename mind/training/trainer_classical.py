@@ -538,4 +538,3 @@ def save_results(
 
     logger.info(f"Results saved to {output_file}")
 
-    

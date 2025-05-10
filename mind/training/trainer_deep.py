@@ -1,5 +1,7 @@
 """Deep learning models trainer module."""
 import os
+import time
+import datetime
 import numpy as np
 import torch
 import torch.nn as nn
@@ -7,8 +9,9 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 from typing import Dict, Any, List, Optional, Tuple, Callable
 import logging
-import time
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+import matplotlib.pyplot as plt
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
+from omegaconf import DictConfig
 
 from mind.models.deep.fcnn import create_fcnn
 from mind.models.deep.cnn import create_cnn
@@ -18,14 +21,16 @@ from mind.training.train import (
     create_dataloaders,
     create_model_name
 )
-from mind.utils.experiment_tracking import log_metrics
+from mind.utils.experiment_tracking import log_metrics, log_artifact
+from mind.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+# Set up logger
+logger = get_logger(__name__)
 
 
 def create_optimizer(
         model: nn.Module,
-        config: Dict[str, Any]
+        config: DictConfig
 ) -> torch.optim.Optimizer:
     """
     Create optimizer for deep learning model.
@@ -34,7 +39,7 @@ def create_optimizer(
     ----------
     model : nn.Module
         Model to optimize
-    config : Dict[str, Any]
+    config : DictConfig
         Configuration dictionary
 
     Returns
@@ -43,22 +48,45 @@ def create_optimizer(
         Optimizer
     """
     # Extract optimizer parameters
-    learning_rate = config['training'].get('learning_rate', 0.001)
-    weight_decay = config['training'].get('weight_decay', 1e-5)
+    learning_rate = config.training.learning_rate
+    weight_decay = config.training.weight_decay
+    optimizer_type = config.training.get('optimizer', 'adamw')
 
-    # Create AdamW optimizer
-    optimizer = optim.AdamW(
-        model.parameters(),
-        lr=learning_rate,
-        weight_decay=weight_decay
-    )
+    # Create optimizer based on type
+    if optimizer_type.lower() == 'adam':
+        optimizer = optim.Adam(
+            model.parameters(),
+            lr=learning_rate,
+            weight_decay=weight_decay
+        )
+    elif optimizer_type.lower() == 'adamw':
+        optimizer = optim.AdamW(
+            model.parameters(),
+            lr=learning_rate,
+            weight_decay=weight_decay
+        )
+    elif optimizer_type.lower() == 'sgd':
+        momentum = config.training.get('momentum', 0.9)
+        optimizer = optim.SGD(
+            model.parameters(),
+            lr=learning_rate,
+            momentum=momentum,
+            weight_decay=weight_decay
+        )
+    else:
+        logger.warning(f"Unknown optimizer type: {optimizer_type}, using AdamW")
+        optimizer = optim.AdamW(
+            model.parameters(),
+            lr=learning_rate,
+            weight_decay=weight_decay
+        )
 
     return optimizer
 
 
 def create_scheduler(
         optimizer: torch.optim.Optimizer,
-        config: Dict[str, Any],
+        config: DictConfig,
         num_samples: int,
         batch_size: int
 ) -> Callable:
@@ -69,7 +97,7 @@ def create_scheduler(
     ----------
     optimizer : torch.optim.Optimizer
         Optimizer
-    config : Dict[str, Any]
+    config : DictConfig
         Configuration dictionary
     num_samples : int
         Number of training samples
@@ -81,51 +109,110 @@ def create_scheduler(
     Callable
         Function to create scheduler given optimizer and num_epochs
     """
+    scheduler_type = config.training.get('scheduler', 'onecycle')
 
-    def create_one_cycle_scheduler(optimizer, num_epochs):
-        # Calculate number of steps per epoch
-        steps_per_epoch = (num_samples + batch_size - 1) // batch_size
+    if scheduler_type.lower() == 'onecycle':
+        def create_one_cycle_scheduler(optimizer, num_epochs):
+            # Calculate number of steps per epoch
+            steps_per_epoch = (num_samples + batch_size - 1) // batch_size
 
-        # Create OneCycleLR scheduler
-        scheduler = optim.lr_scheduler.OneCycleLR(
-            optimizer,
-            max_lr=config['training'].get('learning_rate', 0.001),
-            epochs=num_epochs,
-            steps_per_epoch=steps_per_epoch,
-            pct_start=0.3,  # Percentage of iterations for learning rate warmup
-            anneal_strategy='cos',  # Use cosine annealing for learning rate decay
-            div_factor=25.0,  # Initial learning rate is max_lr/div_factor
-            final_div_factor=1e4  # Final learning rate is max_lr/(div_factor*final_div_factor)
-        )
+            # Create OneCycleLR scheduler
+            scheduler = optim.lr_scheduler.OneCycleLR(
+                optimizer,
+                max_lr=config.training.learning_rate,
+                epochs=num_epochs,
+                steps_per_epoch=steps_per_epoch,
+                pct_start=0.3,
+                anneal_strategy='cos',
+                div_factor=25.0,
+                final_div_factor=1e4
+            )
 
-        return scheduler
+            return scheduler
 
-    return create_one_cycle_scheduler
+        return create_one_cycle_scheduler
+
+    elif scheduler_type.lower() == 'reduce_on_plateau':
+        def create_reduce_on_plateau_scheduler(optimizer, num_epochs):
+            # Create ReduceLROnPlateau scheduler
+            patience = config.training.get('scheduler_patience', 5)
+            factor = config.training.get('scheduler_factor', 0.5)
+
+            scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer,
+                mode='min',
+                factor=factor,
+                patience=patience,
+                verbose=True
+            )
+
+            return scheduler
+
+        return create_reduce_on_plateau_scheduler
+
+    elif scheduler_type.lower() == 'cosine':
+        def create_cosine_scheduler(optimizer, num_epochs):
+            # Create CosineAnnealingLR scheduler
+            T_max = config.training.get('cosine_t_max', num_epochs)
+            eta_min = config.training.get('cosine_eta_min', 0)
+
+            scheduler = optim.lr_scheduler.CosineAnnealingLR(
+                optimizer,
+                T_max=T_max,
+                eta_min=eta_min
+            )
+
+            return scheduler
+
+        return create_cosine_scheduler
+
+    else:
+        logger.warning(f"Unknown scheduler type: {scheduler_type}, using OneCycleLR")
+        return create_scheduler(optimizer, config, num_samples, batch_size)
+
 
 def train_fcnn_model(
         data: Dict[str, Any],
         signal_type: str,
-        config: Dict[str, Any],
+        config: DictConfig,
         device: torch.device,
         wandb_run: Any = None
 ) -> Tuple[nn.Module, Dict[str, Any]]:
     """
     Train a Fully Connected Neural Network model with signal-specific optimizations.
     Modified to ensure binary classification.
+
+    Parameters
+    ----------
+    data : Dict[str, Any]
+        Dictionary containing the processed data
+    signal_type : str
+        Signal type ('calcium', 'deltaf', or 'deconv')
+    config : DictConfig
+        Configuration dictionary
+    device : torch.device
+        Device to use for training
+    wandb_run : Any, optional
+        Weights & Biases run, by default None
+
+    Returns
+    -------
+    Tuple[nn.Module, Dict[str, Any]]
+        Trained model and training history
     """
     logger.info(f"Training FCNN model for {signal_type} signal")
 
     # Create dataloaders
     dataloaders = create_dataloaders(
         data, signal_type,
-        batch_size=config['training'].get('batch_size', 32),
+        batch_size=config.training.batch_size,
         window_size=data['window_size'],
         reshape=False  # Use flattened data for FCNN
     )
 
     # Extract metadata
     input_dim = dataloaders['input_dim']
-    n_classes = 2  # Ensure binary classification (0 and 1)
+    n_classes = 2  # Ensure binary classification
     train_loader = dataloaders['train_loader']
     val_loader = dataloaders['val_loader']
 
@@ -136,15 +223,15 @@ def train_fcnn_model(
     # Create optimizer with adjusted learning rate for deconvolved signals
     if signal_type == 'deconv':
         # Higher learning rate for deconvolved signals
-        lr_multiplier = 1.2
-        weight_decay = 5e-6  # Reduced weight decay for better flexibility
+        lr_multiplier = config.training.get('deconv_lr_multiplier', 1.2)
+        weight_decay = config.training.get('deconv_weight_decay', 5e-6)
     else:
         lr_multiplier = 1.0
-        weight_decay = config['training'].get('weight_decay', 1e-5)
+        weight_decay = config.training.weight_decay
 
     optimizer = optim.AdamW(
         model.parameters(),
-        lr=config['training'].get('learning_rate', 0.001) * lr_multiplier,
+        lr=config.training.learning_rate * lr_multiplier,
         weight_decay=weight_decay
     )
 
@@ -152,13 +239,13 @@ def train_fcnn_model(
     if signal_type == 'deconv':
         def scheduler_fn(optimizer, num_epochs):
             # Calculate steps per epoch
-            steps_per_epoch = (len(dataloaders['X_train']) +
-                               config['training'].get('batch_size', 32) - 1) // config['training'].get('batch_size', 32)
+            steps_per_epoch = (len(
+                dataloaders['X_train']) + config.training.batch_size - 1) // config.training.batch_size
 
             # OneCycleLR with higher max_lr for deconvolved signals
             return optim.lr_scheduler.OneCycleLR(
                 optimizer,
-                max_lr=config['training'].get('learning_rate', 0.001) * 1.5,  # 50% higher max_lr
+                max_lr=config.training.learning_rate * 1.5,  # 50% higher max_lr
                 epochs=num_epochs,
                 steps_per_epoch=steps_per_epoch,
                 pct_start=0.3,
@@ -169,7 +256,7 @@ def train_fcnn_model(
     else:
         scheduler_fn = create_scheduler(
             optimizer, config, len(dataloaders['X_train']),
-            config['training'].get('batch_size', 32)
+            config.training.batch_size
         )
 
     # Get class weights
@@ -178,7 +265,9 @@ def train_fcnn_model(
     # Create loss function - optimized for binary classification
     if signal_type == 'deconv':
         # Use focal loss for deconvolved signals to better handle class imbalance
-        criterion = FocalLoss(alpha=2.0, gamma=2.0)
+        alpha = config.training.get('focal_loss_alpha', 2.0)
+        gamma = config.training.get('focal_loss_gamma', 2.0)
+        criterion = FocalLoss(alpha=alpha, gamma=gamma)
     elif class_weights is not None:
         # Convert to PyTorch tensor for binary classification
         weight_tensor = torch.ones(2, device=device)
@@ -215,7 +304,7 @@ def train_fcnn_model(
 def train_cnn_model(
         data: Dict[str, Any],
         signal_type: str,
-        config: Dict[str, Any],
+        config: DictConfig,
         device: torch.device,
         wandb_run: Any = None
 ) -> Tuple[nn.Module, Dict[str, Any]]:
@@ -228,7 +317,7 @@ def train_cnn_model(
         Dictionary containing the processed data
     signal_type : str
         Signal type ('calcium', 'deltaf', or 'deconv')
-    config : Dict[str, Any]
+    config : DictConfig
         Configuration dictionary
     device : torch.device
         Device to use for training
@@ -245,7 +334,7 @@ def train_cnn_model(
     # Create dataloaders
     dataloaders = create_dataloaders(
         data, signal_type,
-        batch_size=config['training'].get('batch_size', 32),
+        batch_size=config.training.batch_size,
         window_size=data['window_size'],
         reshape=True  # Use reshaped data for CNN
     )
@@ -253,7 +342,7 @@ def train_cnn_model(
     # Extract metadata
     window_size = dataloaders['window_size']
     n_neurons = dataloaders['n_neurons']
-    n_classes = dataloaders['n_classes']
+    n_classes = 2  # Ensure binary classification
     train_loader = dataloaders['train_loader']
     val_loader = dataloaders['val_loader']
 
@@ -264,15 +353,15 @@ def train_cnn_model(
     # Create optimizer with adjusted parameters for deconvolved signals
     if signal_type == 'deconv':
         # Higher learning rate and lower weight decay for deconvolved signals
-        lr_multiplier = 1.3
-        weight_decay = 1e-6  # Lower weight decay for better flexibility
+        lr_multiplier = config.training.get('deconv_lr_multiplier', 1.3)
+        weight_decay = config.training.get('deconv_weight_decay', 1e-6)
     else:
         lr_multiplier = 1.0
-        weight_decay = config['training'].get('weight_decay', 1e-5)
+        weight_decay = config.training.weight_decay
 
     optimizer = optim.AdamW(
         model.parameters(),
-        lr=config['training'].get('learning_rate', 0.001) * lr_multiplier,
+        lr=config.training.learning_rate * lr_multiplier,
         weight_decay=weight_decay
     )
 
@@ -280,13 +369,13 @@ def train_cnn_model(
     if signal_type == 'deconv':
         def scheduler_fn(optimizer, num_epochs):
             # Calculate steps per epoch
-            steps_per_epoch = (len(dataloaders['X_train']) +
-                               config['training'].get('batch_size', 32) - 1) // config['training'].get('batch_size', 32)
+            steps_per_epoch = (len(
+                dataloaders['X_train']) + config.training.batch_size - 1) // config.training.batch_size
 
             # OneCycleLR with higher max_lr for deconvolved signals
             return optim.lr_scheduler.OneCycleLR(
                 optimizer,
-                max_lr=config['training'].get('learning_rate', 0.001) * 1.6,  # 60% higher max_lr
+                max_lr=config.training.learning_rate * 1.6,  # 60% higher max_lr
                 epochs=num_epochs,
                 steps_per_epoch=steps_per_epoch,
                 pct_start=0.25,  # Faster warmup
@@ -297,7 +386,7 @@ def train_cnn_model(
     else:
         scheduler_fn = create_scheduler(
             optimizer, config, len(dataloaders['X_train']),
-            config['training'].get('batch_size', 32)
+            config.training.batch_size
         )
 
     # Get class weights if available
@@ -306,10 +395,14 @@ def train_cnn_model(
     # Create loss function
     if signal_type == 'deconv':
         # Use focal loss with higher alpha for deconvolved signals
-        criterion = FocalLoss(alpha=2.5, gamma=2.0)
+        alpha = config.training.get('focal_loss_alpha', 2.5)
+        gamma = config.training.get('focal_loss_gamma', 2.0)
+        criterion = FocalLoss(alpha=alpha, gamma=gamma)
     elif class_weights is not None:
         # Use focal loss for imbalanced data
-        criterion = FocalLoss(alpha=2.0, gamma=2.0)
+        alpha = config.training.get('focal_loss_alpha', 2.0)
+        gamma = config.training.get('focal_loss_gamma', 2.0)
+        criterion = FocalLoss(alpha=alpha, gamma=gamma)
     else:
         criterion = nn.CrossEntropyLoss()
 
@@ -319,11 +412,19 @@ def train_cnn_model(
     # Train model with more epochs for deconvolved signals
     if signal_type == 'deconv':
         # Make a copy of config to increase epochs for deconvolved signal
-        local_config = config.copy()
-        local_config['training'] = config['training'].copy()
-        local_config['training']['epochs'] = int(config['training'].get('epochs', 100) * 1.2)
+        epochs_multiplier = config.training.get('deconv_epochs_multiplier', 1.2)
+        local_epochs = int(config.training.epochs * epochs_multiplier)
+        logger.info(f"Increasing epochs to {local_epochs} for deconvolved signal")
     else:
-        local_config = config
+        local_epochs = config.training.epochs
+
+    # Create configuration for train_model
+    train_config = {
+        'training': {
+            'epochs': local_epochs,
+            'early_stopping': config.training.early_stopping
+        }
+    }
 
     model, history = train_model(
         model=model,
@@ -332,7 +433,7 @@ def train_cnn_model(
         criterion=criterion,
         optimizer=optimizer,
         device=device,
-        config=local_config,
+        config=train_config,
         scheduler_fn=scheduler_fn,
         class_weights=class_weights,
         model_name=model_name,
@@ -344,7 +445,7 @@ def train_cnn_model(
 
 def train_all_deep_models(
         data: Dict[str, Any],
-        config: Dict[str, Any],
+        config: DictConfig,
         wandb_run: Any = None
 ) -> Dict[str, Any]:
     """
@@ -354,7 +455,7 @@ def train_all_deep_models(
     ----------
     data : Dict[str, Any]
         Dictionary containing the processed data
-    config : Dict[str, Any]
+    config : DictConfig
         Configuration dictionary
     wandb_run : Any, optional
         Weights & Biases run, by default None
@@ -378,25 +479,76 @@ def train_all_deep_models(
     }
 
     # Define signal types
-    signal_types = ['calcium', 'deltaf', 'deconv']
+    signal_types = config.data.signal_types
+
+    # Create timestamp for saving models
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
     # Train models for each signal type
     for signal_type in signal_types:
         logger.info(f"Training models for {signal_type} signal")
 
-        # Train FCNN model
-        fcnn_model, fcnn_history = train_fcnn_model(
-            data, signal_type, config, device, wandb_run
-        )
-        results['models'][f"{signal_type}_fcnn"] = fcnn_model
-        results['history'][f"{signal_type}_fcnn"] = fcnn_history
+        # Extract data for this signal type
+        X_train_key = f'X_train_{signal_type}'
+        y_train_key = f'y_train_{signal_type}'
 
-        # Train CNN model
-        cnn_model, cnn_history = train_cnn_model(
-            data, signal_type, config, device, wandb_run
-        )
-        results['models'][f"{signal_type}_cnn"] = cnn_model
-        results['history'][f"{signal_type}_cnn"] = cnn_history
+        if X_train_key not in data or y_train_key not in data:
+            logger.warning(f"Training data not found for {signal_type}")
+            continue
+
+        try:
+            # Train FCNN model
+            fcnn_model, fcnn_history = train_fcnn_model(
+                data, signal_type, config, device, wandb_run
+            )
+            results['models'][f"{signal_type}_fcnn"] = fcnn_model
+            results['history'][f"{signal_type}_fcnn"] = fcnn_history
+
+            # Save model
+            save_path = os.path.join(
+                config.experiment.output_dir,
+                'models',
+                'deep',
+                timestamp,
+                f"{signal_type}_fcnn.pt"
+            )
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            torch.save(fcnn_model.state_dict(), save_path)
+            logger.info(f"Saved FCNN model to {save_path}")
+
+            # Log model artifact to W&B
+            if wandb_run is not None:
+                log_artifact(wandb_run, save_path, f"{signal_type}_fcnn_model")
+
+        except Exception as e:
+            logger.error(f"Error training FCNN for {signal_type}: {e}", exc_info=True)
+
+        try:
+            # Train CNN model
+            cnn_model, cnn_history = train_cnn_model(
+                data, signal_type, config, device, wandb_run
+            )
+            results['models'][f"{signal_type}_cnn"] = cnn_model
+            results['history'][f"{signal_type}_cnn"] = cnn_history
+
+            # Save model
+            save_path = os.path.join(
+                config.experiment.output_dir,
+                'models',
+                'deep',
+                timestamp,
+                f"{signal_type}_cnn.pt"
+            )
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            torch.save(cnn_model.state_dict(), save_path)
+            logger.info(f"Saved CNN model to {save_path}")
+
+            # Log model artifact to W&B
+            if wandb_run is not None:
+                log_artifact(wandb_run, save_path, f"{signal_type}_cnn_model")
+
+        except Exception as e:
+            logger.error(f"Error training CNN for {signal_type}: {e}", exc_info=True)
 
     return results
 
@@ -458,7 +610,7 @@ def evaluate_deep_model(
     all_probs = np.concatenate(all_probs)
     all_targets = np.concatenate(all_targets)
 
-    # Ensure binary classification (0 vs 1)
+    # Ensure binary classification (0=no footstep, 1=contralateral footstep)
     if len(np.unique(all_targets)) > 2:
         logger.warning(f"Converting multi-class targets to binary for {model_name}")
         binary_targets = (all_targets > 0).astype(int)
@@ -482,6 +634,10 @@ def evaluate_deep_model(
         except Exception as e:
             logger.warning(f"Could not calculate ROC AUC: {e}")
 
+    # Calculate confusion matrix
+    from sklearn.metrics import confusion_matrix
+    cm = confusion_matrix(all_targets, all_preds)
+
     # Store metrics
     metrics = {
         'accuracy': accuracy,
@@ -490,7 +646,8 @@ def evaluate_deep_model(
         'f1_macro': f1_macro,
         'predictions': all_preds,
         'probabilities': all_probs,
-        'targets': all_targets
+        'targets': all_targets,
+        'confusion_matrix': cm
     }
 
     if roc_auc is not None:
@@ -524,9 +681,9 @@ def evaluate_deep_model(
 def test_deep_models(
         models: Dict[str, nn.Module],
         data: Dict[str, Any],
-        config: Dict[str, Any],
+        config: DictConfig,
         wandb_run: Any = None
-) -> Dict[str, Any]:
+) -> Dict[str, Dict[str, Dict[str, Any]]]:
     """
     Test trained deep learning models on test data.
 
@@ -536,14 +693,14 @@ def test_deep_models(
         Dictionary containing trained models
     data : Dict[str, Any]
         Dictionary containing the processed data
-    config : Dict[str, Any]
+    config : DictConfig
         Configuration dictionary
     wandb_run : Any, optional
         Weights & Biases run, by default None
 
     Returns
     -------
-    Dict[str, Any]
+    Dict[str, Dict[str, Dict[str, Any]]]
         Dictionary containing test results
     """
     logger.info("Testing deep learning models on test data")
@@ -555,7 +712,7 @@ def test_deep_models(
     test_results = {}
 
     # Define signal types and model types
-    signal_types = ['calcium', 'deltaf', 'deconv']
+    signal_types = config.data.signal_types
     model_types = ['fcnn', 'cnn']
 
     # Test models for each signal type
@@ -576,20 +733,24 @@ def test_deep_models(
 
             # Create dataloaders
             reshape = model_type != 'fcnn'  # Reshape for CNN but not for FCNN
-            dataloaders = create_dataloaders(
-                data, signal_type,
-                batch_size=config['training'].get('batch_size', 32),
-                window_size=data['window_size'],
-                reshape=reshape
-            )
+            try:
+                dataloaders = create_dataloaders(
+                    data, signal_type,
+                    batch_size=config.training.batch_size,
+                    window_size=data['window_size'],
+                    reshape=reshape
+                )
 
-            # Evaluate model
-            metrics = evaluate_deep_model(
-                model, dataloaders['test_loader'], device,
-                f"test_{model_key}", wandb_run
-            )
+                # Evaluate model
+                metrics = evaluate_deep_model(
+                    model, dataloaders['test_loader'], device,
+                    f"test_{model_key}", wandb_run
+                )
 
-            signal_results[model_type] = metrics
+                signal_results[model_type] = metrics
+
+            except Exception as e:
+                logger.error(f"Error testing {model_key}: {e}", exc_info=True)
 
         test_results[signal_type] = signal_results
 
@@ -598,10 +759,11 @@ def test_deep_models(
 
 def save_deep_models(
         models: Dict[str, nn.Module],
-        output_dir: str = 'models/deep'
+        output_dir: str = 'models/deep',
+        timestamp: Optional[str] = None
 ) -> None:
     """
-    Save trained deep learning models.
+    Save trained deep learning models with timestamp.
 
     Parameters
     ----------
@@ -609,7 +771,13 @@ def save_deep_models(
         Dictionary containing trained models
     output_dir : str, optional
         Output directory, by default 'models/deep'
+    timestamp : Optional[str], optional
+        Timestamp to include in the output directory, by default None
     """
+    # Create timestamped output directory if timestamp is provided
+    if timestamp:
+        output_dir = os.path.join(output_dir, timestamp)
+
     logger.info(f"Saving deep learning models to {output_dir}")
 
     # Create output directory
@@ -632,7 +800,7 @@ def save_deep_models(
 def load_deep_models(
         model_names: List[str],
         data: Dict[str, Any],
-        config: Dict[str, Any],
+        config: DictConfig,
         input_dir: str = 'models/deep'
 ) -> Dict[str, nn.Module]:
     """
@@ -644,7 +812,7 @@ def load_deep_models(
         List of model names to load
     data : Dict[str, Any]
         Dictionary containing the processed data
-    config : Dict[str, Any]
+    config : DictConfig
         Configuration dictionary
     input_dir : str, optional
         Input directory, by default 'models/deep'
@@ -685,7 +853,7 @@ def load_deep_models(
                 data, signal_type, reshape=False
             )
             input_dim = dataloaders['input_dim']
-            n_classes = dataloaders['n_classes']
+            n_classes = 2  # Binary classification
 
             # Create model
             model = create_fcnn(input_dim, n_classes, config)
@@ -696,7 +864,7 @@ def load_deep_models(
             )
             window_size = dataloaders['window_size']
             n_neurons = dataloaders['n_neurons']
-            n_classes = dataloaders['n_classes']
+            n_classes = 2  # Binary classification
 
             # Create model
             model = create_cnn(n_neurons, window_size, n_classes, config)
@@ -717,10 +885,11 @@ def load_deep_models(
 
 def save_results(
         results: Dict[str, Any],
-        output_file: str = 'results/metrics/deep_learning_results.json'
+        output_file: str = 'results/metrics/deep_learning_results.json',
+        timestamp: Optional[str] = None
 ) -> None:
     """
-    Save results to JSON file.
+    Save results to JSON file with timestamp.
 
     Parameters
     ----------
@@ -728,7 +897,16 @@ def save_results(
         Results dictionary
     output_file : str, optional
         Output file path, by default 'results/metrics/deep_learning_results.json'
+    timestamp : Optional[str], optional
+        Timestamp to include in the output file name, by default None
     """
+    # Add timestamp to output file name if provided
+    if timestamp:
+        output_file = os.path.join(
+            os.path.dirname(output_file),
+            f"{os.path.splitext(os.path.basename(output_file))[0]}_{timestamp}.json"
+        )
+
     logger.info(f"Saving results to {output_file}")
 
     # Create output directory
