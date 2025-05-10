@@ -171,12 +171,12 @@ def align_neural_behavioral_data(neural_data: Dict[str, np.ndarray],
 
 def load_processed_data(file_path: str = None) -> Dict[str, Any]:
     """
-    Load preprocessed data from NPZ file.
+    Load preprocessed data from NPZ file or process MATLAB file directly.
 
     Parameters
     ----------
     file_path : str, optional
-        Path to the NPZ file. If None, will look in default location.
+        Path to the NPZ file or MATLAB file. If None, will look in default location.
 
     Returns
     -------
@@ -207,21 +207,65 @@ def load_processed_data(file_path: str = None) -> Dict[str, Any]:
         file_path = os.path.join(processed_dir, processed_files[0])
 
     try:
-        logger.info(f"Loading processed data from {file_path}")
-        data = np.load(file_path, allow_pickle=True)
-        data_dict = {key: data[key] for key in data.files}
+        # Check if file is a MATLAB file
+        if file_path.lower().endswith('.mat'):
+            logger.info(f"Detected MATLAB file: {file_path}")
 
-        # Convert object arrays to appropriate types
-        for key in data_dict:
-            if isinstance(data_dict[key], np.ndarray) and data_dict[key].dtype == np.dtype('O'):
-                if key == 'scalers' or key == 'class_weights':
-                    data_dict[key] = data_dict[key].item()
+            # Load MATLAB data
+            from mind.data.loader import load_matlab_data
+            from mind.data.processor import process_data, split_data
 
-        logger.info(f"Successfully loaded processed data")
-        return data_dict
+            # Load the MATLAB file
+            neural_data = load_matlab_data(file_path)
+
+            # Check if labels exist, if not create dummy labels
+            if 'labels' not in neural_data:
+                logger.warning(f"No labels found in MATLAB file, creating dummy labels")
+                neural_data['labels'] = np.zeros(neural_data['calcium_signal'].shape[0])
+
+            # Create a basic config for processing
+            config = {
+                'data': {
+                    'window_size': 15,  # Default window size
+                    'step_size': 1,  # Default step size
+                    'binary_task': True
+                },
+                'experiment': {
+                    'seed': 42
+                }
+            }
+
+            # Process the data
+            logger.info(f"Processing MATLAB data")
+            processed_data = process_data(neural_data, config)
+
+            # Split the data
+            logger.info(f"Splitting data into train/val/test sets")
+            data_dict = split_data(processed_data, config)
+
+            # Add the matlab file path to the data dictionary
+            data_dict['matlab_file'] = file_path
+
+            logger.info(f"Successfully processed MATLAB file")
+            return data_dict
+
+        else:
+            # Attempt to load as NPZ file
+            logger.info(f"Loading processed data from {file_path}")
+            data = np.load(file_path, allow_pickle=True)
+            data_dict = {key: data[key] for key in data.files}
+
+            # Convert object arrays to appropriate types
+            for key in data_dict:
+                if isinstance(data_dict[key], np.ndarray) and data_dict[key].dtype == np.dtype('O'):
+                    if key == 'scalers' or key == 'class_weights':
+                        data_dict[key] = data_dict[key].item()
+
+            logger.info(f"Successfully loaded processed data")
+            return data_dict
 
     except Exception as e:
-        logger.error(f"Error loading processed data: {e}")
+        logger.error(f"Error loading data: {e}")
         raise
 
 
