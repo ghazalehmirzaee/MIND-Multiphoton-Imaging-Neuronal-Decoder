@@ -21,3 +21,23 @@ source env/bin/activate  # On Windows: env\Scripts\activate
 
 # Install the package and dependencies
 pip install -e .
+```
+
+```bash
+mind/
+  ├── config/            # Hydra configurations
+  ├── data/              # Data loading and processing
+  ├── models/            # Model implementations
+  │   ├── classical/     # Random Forest, SVM, MLP
+  │   └── deep/          # FCNN, CNN
+  ├── training/          # Training pipelines
+  ├── evaluation/        # Metrics and analysis
+  ├── visualization/     # Visualization utilities
+  └── utils/             # Helper functions
+experiments/            # Main experiment scripts
+tests/                  # Unit tests
+requirements.txt        # Dependencies
+setup.py                # Package setup
+README.md              # Project documentation
+```
+
