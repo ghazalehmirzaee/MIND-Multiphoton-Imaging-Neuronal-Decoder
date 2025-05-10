@@ -1,14 +1,17 @@
-"""Script to compare all models on all signal types."""
+"""Script to compare all models on all signal types with Hydra configuration."""
 import os
-import argparse
+import logging
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-import logging
 import torch
 import wandb
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+from datetime import datetime
+import hydra
+from hydra.utils import instantiate
+from omegaconf import DictConfig, OmegaConf
 
 from mind.data.loader import load_processed_data
 from mind.training.trainer_classical import (
@@ -43,167 +46,55 @@ from mind.visualization.signal_visualization import create_signal_visualizations
 from mind.evaluation.metrics import generate_metrics_report
 
 
-def parse_args():
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="Compare models on calcium imaging data.")
+@hydra.main(config_path="../mind/config", config_name="default")
+def main(cfg: DictConfig) -> None:
+    """
+    Main function to compare models on different signal types with Hydra configuration.
 
-    # Data parameters
-    parser.add_argument('--data_file', type=str, required=True,
-                        help='Path to processed data file')
-
-    # Training parameters
-    parser.add_argument('--epochs', type=int, default=100,
-                        help='Number of epochs for deep learning models')
-    parser.add_argument('--batch_size', type=int, default=32,
-                        help='Batch size for deep learning models')
-
-    # Execution flags
-    parser.add_argument('--skip_classical', action='store_true',
-                        help='Skip classical ML models')
-    parser.add_argument('--skip_deep_learning', action='store_true',
-                        help='Skip deep learning models')
-    parser.add_argument('--skip_visualization', action='store_true',
-                        help='Skip results visualization')
-
-    # W&B parameters
-    parser.add_argument('--project_name', type=str, default='MIND',
-                        help='W&B project name')
-    parser.add_argument('--experiment_name', type=str, default=None,
-                        help='Name for the W&B experiment')
-
-    # Output parameters
-    parser.add_argument('--output_dir', type=str, default='results',
-                        help='Output directory')
-
-    return parser.parse_args()
-
-
-def create_config(args):
-    """Create configuration dictionary."""
-    config = {
-        'experiment': {
-            'name': args.experiment_name or 'model_comparison',
-            'seed': 42,
-            'output_dir': args.output_dir
-        },
-        'data': {
-            'file': args.data_file
-        },
-        'training': {
-            'batch_size': args.batch_size,
-            'epochs': args.epochs,
-            'learning_rate': 0.001,
-            'weight_decay': 1e-5,
-            'early_stopping': {
-                'patience': 15,
-                'min_delta': 0.001
-            }
-        },
-        'models': {
-            'classical': {
-                'random_forest': {
-                    'n_estimators': 200,
-                    'max_depth': 30,
-                    'min_samples_split': 5,
-                    'min_samples_leaf': 2,
-                    'class_weight': 'balanced'
-                },
-                'svm': {
-                    'kernel': 'rbf',
-                    'C': 1.0,
-                    'gamma': 'scale',
-                    'class_weight': 'balanced',
-                    'probability': True,
-                    'pca': True,
-                    'pca_components': 0.95
-                },
-                'mlp': {
-                    'hidden_layer_sizes': [128, 64],
-                    'activation': 'relu',
-                    'solver': 'adam',
-                    'alpha': 0.0001,
-                    'learning_rate': 'adaptive',
-                    'early_stopping': True
-                }
-            },
-            'deep': {
-                'fcnn': {
-                    'hidden_sizes': [256, 128, 64],
-                    'dropout_rates': [0.4, 0.4, 0.3],
-                    'batch_norm': True
-                },
-                'cnn': {
-                    'channels': [64, 128, 256],
-                    'kernel_size': 3,
-                    'dropout_rate': 0.5,
-                    'batch_norm': True
-                }
-            }
-        },
-        'visualization': {
-            'style': 'seaborn-whitegrid',
-            'figsize': [12, 8],
-            'dpi': 300,
-            'save_format': 'png',
-            'colors': {
-                'calcium': "#1f77b4",
-                'deltaf': "#ff7f0e",
-                'deconv': "#2ca02c"
-            }
-        },
-        'wandb': {
-            'project': args.project_name,
-            'entity': 'your_username',
-            'log_artifacts': True
-        }
-    }
-
-    return config
-
-
-def main():
-    """Main function."""
-    # Parse arguments
-    args = parse_args()
+    Parameters
+    ----------
+    cfg : DictConfig
+        Hydra configuration object
+    """
+    # Access the working directory (set by Hydra)
+    work_dir = os.getcwd()
 
     # Setup logging
-    setup_logging(log_file=os.path.join(args.output_dir, 'logs', 'compare_models.log'))
+    log_file = os.path.join(work_dir, 'logs', f'compare_models_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log')
+    setup_logging(log_file=log_file)
     logger = logging.getLogger(__name__)
-    logger.info("Starting model comparison")
+    logger.info("Starting model comparison with Hydra configuration")
 
-    # Create configuration
-    config = create_config(args)
-
-    # Save configuration
-    os.makedirs(os.path.join(args.output_dir, 'config'), exist_ok=True)
-    save_config(config, os.path.join(args.output_dir, 'config', 'model_comparison.json'))
+    # Save configuration to JSON
+    config_dir = os.path.join(work_dir, 'config')
+    os.makedirs(config_dir, exist_ok=True)
+    save_config(cfg, os.path.join(config_dir, 'model_comparison.json'))
 
     # Initialize W&B
     wandb_run = init_wandb(
-        project_name=args.project_name,
-        experiment_name=args.experiment_name,
-        config=config
+        project_name=cfg.wandb.project,
+        experiment_name=cfg.experiment.name,
+        config=cfg
     )
 
     # Set plotting style
-    # plt.style.use(config['visualization']['style'])
-    plt.style.use('ggplot')
+    plt.style.use(cfg.visualization.style)
 
     # Load data
-    logger.info(f"Loading data from {args.data_file}")
-    data = load_processed_data(args.data_file)
+    logger.info(f"Loading data from {cfg.data.matlab_file}")
+    data = load_processed_data(cfg.data.matlab_file)
 
     # Create output directories
-    os.makedirs(os.path.join(args.output_dir, 'models', 'classical'), exist_ok=True)
-    os.makedirs(os.path.join(args.output_dir, 'models', 'deep'), exist_ok=True)
-    os.makedirs(os.path.join(args.output_dir, 'metrics'), exist_ok=True)
-    os.makedirs(os.path.join(args.output_dir, 'figures'), exist_ok=True)
+    os.makedirs(os.path.join(work_dir, 'models', 'classical'), exist_ok=True)
+    os.makedirs(os.path.join(work_dir, 'models', 'deep'), exist_ok=True)
+    os.makedirs(os.path.join(work_dir, 'metrics'), exist_ok=True)
+    os.makedirs(os.path.join(work_dir, 'figures'), exist_ok=True)
 
     # Train and evaluate classical ML models
     classical_results = None
-    if not args.skip_classical:
+    if 'classical_types' in cfg.models and cfg.models.classical_types:
         logger.info("Training classical ML models")
-        classical_results = train_all_classical_models(data, config, wandb_run)
+        classical_results = train_all_classical_models(data, cfg, wandb_run)
 
         logger.info("Testing classical ML models")
         classical_test_results = test_classical_models(
@@ -214,37 +105,37 @@ def main():
         logger.info("Saving classical ML models and results")
         save_classical_models(
             classical_results['models'],
-            os.path.join(args.output_dir, 'models', 'classical')
+            os.path.join(work_dir, 'models', 'classical')
         )
         save_classical_results(
             classical_results,
-            os.path.join(args.output_dir, 'metrics', 'classical_ml_results.json')
+            os.path.join(work_dir, 'metrics', 'classical_ml_results.json')
         )
 
     # Train and evaluate deep learning models
     deep_results = None
-    if not args.skip_deep_learning:
+    if 'deep_types' in cfg.models and cfg.models.deep_types:
         logger.info("Training deep learning models")
-        deep_results = train_all_deep_models(data, config, wandb_run)
+        deep_results = train_all_deep_models(data, cfg, wandb_run)
 
         logger.info("Testing deep learning models")
         deep_test_results = test_deep_models(
-            deep_results['models'], data, config, wandb_run
+            deep_results['models'], data, cfg, wandb_run
         )
         deep_results['test_results'] = deep_test_results
 
         logger.info("Saving deep learning models and results")
         save_deep_models(
             deep_results['models'],
-            os.path.join(args.output_dir, 'models', 'deep')
+            os.path.join(work_dir, 'models', 'deep')
         )
         save_deep_results(
             deep_results,
-            os.path.join(args.output_dir, 'metrics', 'deep_learning_results.json')
+            os.path.join(work_dir, 'metrics', 'deep_learning_results.json')
         )
 
     # Visualize results
-    if not args.skip_visualization:
+    if not cfg.get('skip_visualization', False):
         logger.info("Visualizing results")
 
         # Combine results
@@ -281,7 +172,7 @@ def main():
             # Plot performance comparison
             fig = plot_performance_comparison(
                 performance_df,
-                output_file=os.path.join(args.output_dir, 'figures', 'performance_comparison.png')
+                output_file=os.path.join(work_dir, 'figures', 'performance_comparison.png')
             )
             if wandb_run:
                 wandb_run.log({"performance_comparison": wandb.Image(fig)})
@@ -289,7 +180,7 @@ def main():
             # Plot signal type comparison
             fig = plot_signal_type_comparison(
                 performance_df,
-                output_file=os.path.join(args.output_dir, 'figures', 'signal_type_comparison.png')
+                output_file=os.path.join(work_dir, 'figures', 'signal_type_comparison.png')
             )
             if wandb_run:
                 wandb_run.log({"signal_type_comparison": wandb.Image(fig)})
@@ -297,7 +188,7 @@ def main():
             # Plot model comparison
             fig = plot_model_comparison(
                 performance_df,
-                output_file=os.path.join(args.output_dir, 'figures', 'model_comparison.png')
+                output_file=os.path.join(work_dir, 'figures', 'model_comparison.png')
             )
             if wandb_run:
                 wandb_run.log({"model_comparison": wandb.Image(fig)})
@@ -305,7 +196,7 @@ def main():
             # Plot binary confusion matrices
             cm_figure = plot_binary_confusion_matrices(
                 all_results,
-                output_dir=os.path.join(args.output_dir, 'figures')
+                output_dir=os.path.join(work_dir, 'figures')
             )
             if wandb_run:
                 wandb_run.log({"binary_confusion_matrices": wandb.Image(cm_figure)})
@@ -313,7 +204,7 @@ def main():
             # Plot binary ROC curves
             roc_figures = plot_binary_roc_curves(
                 all_results,
-                output_dir=os.path.join(args.output_dir, 'figures')
+                output_dir=os.path.join(work_dir, 'figures')
             )
             if wandb_run:
                 for name, fig in roc_figures.items():
@@ -322,7 +213,7 @@ def main():
             # Create comparative performance grid
             fig = create_comparative_performance_grid(
                 all_results,
-                output_file=os.path.join(args.output_dir, 'figures', 'comparative_performance_grid.png')
+                output_file=os.path.join(work_dir, 'figures', 'comparative_performance_grid.png')
             )
             if wandb_run:
                 wandb_run.log({"comparative_performance_grid": wandb.Image(fig)})
@@ -330,7 +221,7 @@ def main():
             # Plot performance radar
             fig = plot_performance_radar(
                 all_results,
-                output_file=os.path.join(args.output_dir, 'figures', 'performance_radar.png')
+                output_file=os.path.join(work_dir, 'figures', 'performance_radar.png')
             )
             if wandb_run:
                 wandb_run.log({"performance_radar": wandb.Image(fig)})
@@ -338,7 +229,7 @@ def main():
             # Plot cross-signal comparison
             fig = plot_cross_signal_comparison(
                 all_results,
-                output_file=os.path.join(args.output_dir, 'figures', 'cross_signal_comparison.png')
+                output_file=os.path.join(work_dir, 'figures', 'cross_signal_comparison.png')
             )
             if wandb_run:
                 wandb_run.log({"cross_signal_comparison": wandb.Image(fig)})
@@ -346,10 +237,10 @@ def main():
             # Generate metrics report
             metrics_report = generate_metrics_report(
                 all_results,
-                output_file=os.path.join(args.output_dir, 'metrics', 'metrics_report.json')
+                output_file=os.path.join(work_dir, 'metrics', 'metrics_report.json')
             )
             logger.info(
-                f"Generated metrics report saved to {os.path.join(args.output_dir, 'metrics', 'metrics_report.json')}")
+                f"Generated metrics report saved to {os.path.join(work_dir, 'metrics', 'metrics_report.json')}")
 
         # Feature importance visualizations
         if classical_results and 'feature_importance' in classical_results:
@@ -362,7 +253,7 @@ def main():
                     'deltaf': data['n_deltaf_neurons'],
                     'deconv': data['n_deconv_neurons']
                 },
-                output_dir=os.path.join(args.output_dir, 'figures')
+                output_dir=os.path.join(work_dir, 'figures')
             )
 
             # Log figures to W&B
@@ -373,7 +264,7 @@ def main():
             # Create comparative feature importance visualizations
             fi_figures = plot_comparative_feature_importance(
                 classical_results['feature_importance'],
-                output_dir=os.path.join(args.output_dir, 'figures')
+                output_dir=os.path.join(work_dir, 'figures')
             )
 
             # Log figures to W&B
@@ -384,7 +275,7 @@ def main():
         # Signal visualizations
         signal_figures = create_signal_visualizations(
             data,
-            output_dir=os.path.join(args.output_dir, 'figures')
+            output_dir=os.path.join(work_dir, 'figures')
         )
 
         # Log figures to W&B
