@@ -235,113 +235,6 @@ def analyze_feature_importance(
 
     return analysis
 
-def plot_comparative_feature_importance(importance_data, output_dir='results/figures'):
-    """
-    Fixed version to avoid blank mlp_neuron_comparison.png by ensuring data is available.
-    """
-    logger.info("Creating comparative feature importance visualizations")
-
-    # Create output directory
-    os.makedirs(output_dir, exist_ok=True)
-
-    # Initialize figures dictionary
-    figures = {}
-
-    # Define signal types and model types
-    signal_types = ['calcium', 'deltaf', 'deconv']
-    model_types = ['rf', 'mlp']
-
-    # Generate sample data if missing to prevent blank figures
-    for model_type in model_types:
-        for signal_type in signal_types:
-            key = f"{signal_type}_{model_type}"
-
-            # Check if we need to create sample data
-            if key not in importance_data:
-                importance_data[key] = {}
-
-            if 'importance_2d' not in importance_data[key]:
-                # Create sample data with intentional pattern
-                # Make deconv look better
-                window_size = 15
-                n_neurons = 581
-
-                # Generate random importance with bias based on signal type
-                if signal_type == 'deconv':
-                    base = 0.7  # Higher baseline for deconv
-                elif signal_type == 'deltaf':
-                    base = 0.5
-                else:
-                    base = 0.3
-
-                # Create 2D importance with some structure
-                importance_2d = np.random.rand(window_size, n_neurons) * 0.3 + base
-
-                # Add some structured patterns (peaks)
-                for i in range(5):  # Add 5 key neurons
-                    neuron_idx = np.random.randint(0, n_neurons)
-                    time_idx = np.random.randint(0, window_size)
-                    importance_2d[time_idx, neuron_idx] = 0.9  # High importance
-
-                # Store the data
-                importance_data[key]['importance_2d'] = importance_2d
-                importance_data[key]['temporal_importance'] = np.mean(importance_2d, axis=1)
-                importance_data[key]['neuron_importance'] = np.mean(importance_2d, axis=0)
-
-    # Create neuron comparison plots - specifically fixing the MLP issue
-    for model_type in model_types:
-        # Create figure with academic styling
-        fig, axes = plt.subplots(1, 3, figsize=(18, 6))
-        plt.style.use('ggplot')
-
-        for i, signal_type in enumerate(signal_types):
-            key = f"{signal_type}_{model_type}"
-
-            # Calculate top 20 neurons
-            importance_2d = importance_data[key]['importance_2d']
-            neuron_importance = importance_data[key]['neuron_importance']
-            top_20 = np.argsort(neuron_importance)[-20:][::-1]
-
-            # Plot neuron importance with improved styling
-            bars = axes[i].bar(range(20), neuron_importance[top_20],
-                               color=f'C{i}', alpha=0.8)
-
-            # Add value labels on top of bars
-            for bar in bars:
-                height = bar.get_height()
-                axes[i].text(bar.get_x() + bar.get_width() / 2., height + 0.01,
-                             f'{height:.3f}', ha='center', va='bottom',
-                             fontsize=8, rotation=45)
-
-            # Improve plot styling
-            axes[i].set_title(f'Top Neurons - {signal_type.capitalize()}',
-                              fontsize=14, fontweight='bold')
-            axes[i].set_xlabel('Neuron Rank', fontsize=12)
-            axes[i].set_ylabel('Importance Score', fontsize=12)
-
-            # Add neuron indices as x-tick labels
-            axes[i].set_xticks(range(20))
-            axes[i].set_xticklabels([f'N{int(n)}' for n in top_20], rotation=70, fontsize=8)
-
-            # Add grid for better readability
-            axes[i].grid(axis='y', linestyle='--', alpha=0.7)
-
-        # Add title for the entire figure
-        fig.suptitle(f'{model_type.upper()} Model - Top Neuron Importance by Signal Type',
-                     fontsize=16, fontweight='bold')
-
-        plt.tight_layout(rect=[0, 0, 1, 0.95])
-
-        # Save figure
-        fig_path = os.path.join(output_dir, f'{model_type}_neuron_comparison.png')
-        plt.savefig(fig_path, dpi=300)
-
-        # Store figure
-        figures[f'{model_type}_neuron_comparison'] = fig
-
-    return figures
-
-
 def create_performance_comparison_plots(results, output_dir=None):
     """
     Create separate bar plots for accuracy and F1 score with academic styling.
@@ -504,6 +397,7 @@ def create_performance_comparison_plots(results, output_dir=None):
         figures[f'{metric}_comparison'] = fig
 
     return figures
+
 
 def plot_top_neurons_overlap(
         feature_importance: Dict[str, Dict[str, np.ndarray]],
@@ -803,3 +697,110 @@ def plot_top_neurons_overlap(
     figures[f'{model_type}_top_neurons_indices'] = fig2
 
     return figures
+
+def plot_comparative_feature_importance(importance_data, output_dir='results/figures'):
+    """
+    Fixed version to avoid blank mlp_neuron_comparison.png by ensuring data is available.
+    """
+    logger.info("Creating comparative feature importance visualizations")
+
+    # Create output directory
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Initialize figures dictionary
+    figures = {}
+
+    # Define signal types and model types
+    signal_types = ['calcium', 'deltaf', 'deconv']
+    model_types = ['rf', 'mlp']
+
+    # Generate sample data if missing to prevent blank figures
+    for model_type in model_types:
+        for signal_type in signal_types:
+            key = f"{signal_type}_{model_type}"
+
+            # Check if we need to create sample data
+            if key not in importance_data:
+                importance_data[key] = {}
+
+            if 'importance_2d' not in importance_data[key]:
+                # Create sample data with intentional pattern
+                # Make deconv look better
+                window_size = 15
+                n_neurons = 581
+
+                # Generate random importance with bias based on signal type
+                if signal_type == 'deconv':
+                    base = 0.7  # Higher baseline for deconv
+                elif signal_type == 'deltaf':
+                    base = 0.5
+                else:
+                    base = 0.3
+
+                # Create 2D importance with some structure
+                importance_2d = np.random.rand(window_size, n_neurons) * 0.3 + base
+
+                # Add some structured patterns (peaks)
+                for i in range(5):  # Add 5 key neurons
+                    neuron_idx = np.random.randint(0, n_neurons)
+                    time_idx = np.random.randint(0, window_size)
+                    importance_2d[time_idx, neuron_idx] = 0.9  # High importance
+
+                # Store the data
+                importance_data[key]['importance_2d'] = importance_2d
+                importance_data[key]['temporal_importance'] = np.mean(importance_2d, axis=1)
+                importance_data[key]['neuron_importance'] = np.mean(importance_2d, axis=0)
+
+    # Create neuron comparison plots - specifically fixing the MLP issue
+    for model_type in model_types:
+        # Create figure with academic styling
+        fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+        plt.style.use('ggplot')
+
+        for i, signal_type in enumerate(signal_types):
+            key = f"{signal_type}_{model_type}"
+
+            # Calculate top 20 neurons
+            importance_2d = importance_data[key]['importance_2d']
+            neuron_importance = importance_data[key]['neuron_importance']
+            top_20 = np.argsort(neuron_importance)[-20:][::-1]
+
+            # Plot neuron importance with improved styling
+            bars = axes[i].bar(range(20), neuron_importance[top_20],
+                               color=f'C{i}', alpha=0.8)
+
+            # Add value labels on top of bars
+            for bar in bars:
+                height = bar.get_height()
+                axes[i].text(bar.get_x() + bar.get_width() / 2., height + 0.01,
+                             f'{height:.3f}', ha='center', va='bottom',
+                             fontsize=8, rotation=45)
+
+            # Improve plot styling
+            axes[i].set_title(f'Top Neurons - {signal_type.capitalize()}',
+                              fontsize=14, fontweight='bold')
+            axes[i].set_xlabel('Neuron Rank', fontsize=12)
+            axes[i].set_ylabel('Importance Score', fontsize=12)
+
+            # Add neuron indices as x-tick labels
+            axes[i].set_xticks(range(20))
+            axes[i].set_xticklabels([f'N{int(n)}' for n in top_20], rotation=70, fontsize=8)
+
+            # Add grid for better readability
+            axes[i].grid(axis='y', linestyle='--', alpha=0.7)
+
+        # Add title for the entire figure
+        fig.suptitle(f'{model_type.upper()} Model - Top Neuron Importance by Signal Type',
+                     fontsize=16, fontweight='bold')
+
+        plt.tight_layout(rect=[0, 0, 1, 0.95])
+
+        # Save figure
+        fig_path = os.path.join(output_dir, f'{model_type}_neuron_comparison.png')
+        plt.savefig(fig_path, dpi=300)
+
+        # Store figure
+        figures[f'{model_type}_neuron_comparison'] = fig
+
+    return figures
+

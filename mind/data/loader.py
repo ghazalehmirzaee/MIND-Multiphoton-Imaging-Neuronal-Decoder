@@ -1,3 +1,4 @@
+"""Data loading functions."""
 import os
 import numpy as np
 import scipy.io as sio
@@ -56,8 +57,74 @@ def load_matlab_data(file_path: str) -> Dict[str, np.ndarray]:
         logger.error(f"Error loading MATLAB file: {e}")
         raise
 
-def align_neural_behavioral_data(neural_data, behavior_df, binary_task=True):
-    """Align neural recording frames with behavioral events with binary option."""
+
+def load_behavioral_data(file_path: str) -> pd.DataFrame:
+    """
+    Load behavioral data from Excel file.
+
+    Parameters
+    ----------
+    file_path : str
+        Path to the behavioral data file
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame containing behavioral data
+    """
+    logger.info(f"Loading behavioral data from {file_path}")
+
+    try:
+        # Determine file extension
+        _, ext = os.path.splitext(file_path)
+
+        if ext.lower() == '.xlsx' or ext.lower() == '.xls':
+            # Excel file
+            behavior_df = pd.read_excel(file_path)
+        elif ext.lower() == '.csv':
+            # CSV file
+            behavior_df = pd.read_csv(file_path)
+        else:
+            raise ValueError(f"Unsupported file format: {ext}")
+
+        # Verify required columns
+        required_columns = ['Video', 'Total Reach', 'Foot (L/R)', 'Frame Start', 'Frame End', 'Frames']
+        missing_columns = [col for col in required_columns if col not in behavior_df.columns]
+
+        if missing_columns:
+            logger.warning(f"Missing columns in behavioral data: {missing_columns}")
+
+        logger.info(f"Loaded behavioral data with {len(behavior_df)} events")
+        return behavior_df
+
+    except Exception as e:
+        logger.error(f"Error loading behavioral data: {e}")
+        raise
+
+
+def align_neural_behavioral_data(neural_data: Dict[str, np.ndarray],
+                                behavior_df: pd.DataFrame,
+                                binary_task: bool = True) -> Dict[str, np.ndarray]:
+    """
+    Align neural recording frames with behavioral events.
+
+    Parameters
+    ----------
+    neural_data : Dict[str, np.ndarray]
+        Dictionary containing neural data
+    behavior_df : pd.DataFrame
+        DataFrame containing behavioral data
+    binary_task : bool, optional
+        Whether to create binary labels (0 = no footstep, 1 = contralateral/right footstep),
+        by default True
+
+    Returns
+    -------
+    Dict[str, np.ndarray]
+        Updated neural data dictionary with labels
+    """
+    logger.info("Aligning neural and behavioral data")
+
     # Extract frame information
     frame_starts = behavior_df['Frame Start'].values
     frame_ends = behavior_df['Frame End'].values
@@ -92,11 +159,15 @@ def align_neural_behavioral_data(neural_data, behavior_df, binary_task=True):
     logger.info(f"Label distribution:")
     logger.info(f"No footstep (0): {class_counts[0]} frames")
     logger.info(f"Right foot (1): {class_counts[1]} frames")
+    if len(class_counts) > 2:
+        logger.info(f"Left foot (2): {class_counts[2]} frames")
 
+    # Add labels to neural data
     neural_data['labels'] = labels
     neural_data['binary_task'] = binary_task
 
     return neural_data
+
 
 def load_processed_data(file_path: str = None) -> Dict[str, Any]:
     """

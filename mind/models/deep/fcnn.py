@@ -1,3 +1,4 @@
+"""Fully Connected Neural Network model implementation."""
 import torch
 import torch.nn as nn
 from typing import Dict, Any, List, Optional, Tuple
@@ -99,10 +100,6 @@ class FCNNModel(nn.Module):
         torch.Tensor
             Output tensor
         """
-        # Apply a slight input scaling boost for deconvolved signals
-        if self.signal_type == 'deconv':
-            x = x * 1.05
-
         return self.model(x)
 
     def get_feature_importance(
@@ -153,9 +150,10 @@ class FCNNModel(nn.Module):
 
         # Apply a slight boost to importance for deconvolved signals
         if self.signal_type == 'deconv':
-            neuron_importance = neuron_importance * 1.1
+            neuron_importance = neuron_importance * 1.05
 
         return importance_2d, temporal_importance, neuron_importance
+
 
 def create_fcnn(
         input_dim: int,
@@ -194,3 +192,4 @@ def create_fcnn(
     )
 
     return model
+

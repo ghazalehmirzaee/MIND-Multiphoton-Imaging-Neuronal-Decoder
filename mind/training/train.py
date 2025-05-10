@@ -1,3 +1,4 @@
+"""Common training utilities."""
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -149,7 +150,7 @@ def validate(
         val_loader: torch.utils.data.DataLoader,
         criterion: nn.Module,
         device: torch.device
-) -> Dict[str, float]:
+) -> Dict[str, Any]:
     """
     Validate the model.
 
@@ -166,7 +167,7 @@ def validate(
 
     Returns
     -------
-    Dict[str, float]
+    Dict[str, Any]
         Dictionary with validation metrics
     """
     model.eval()
@@ -175,6 +176,7 @@ def validate(
     total = 0
     all_preds = []
     all_targets = []
+    all_probs = []
 
     with torch.no_grad():
         for inputs, targets in tqdm(val_loader, desc="Validating", leave=False):
@@ -190,9 +192,13 @@ def validate(
             total += targets.size(0)
             correct += (predicted == targets).sum().item()
 
-            # Store predictions and targets for additional metrics
+            # Store predictions, probabilities, and targets for additional metrics
             all_preds.append(predicted.cpu().numpy())
             all_targets.append(targets.cpu().numpy())
+
+            # Get probabilities
+            probs = torch.nn.functional.softmax(outputs, dim=1)
+            all_probs.append(probs.cpu().numpy())
 
     # Calculate epoch metrics
     epoch_loss = running_loss / len(val_loader)
@@ -201,12 +207,14 @@ def validate(
     # Concatenate predictions and targets
     all_preds = np.concatenate(all_preds)
     all_targets = np.concatenate(all_targets)
+    all_probs = np.concatenate(all_probs)
 
     return {
         'loss': epoch_loss,
         'accuracy': epoch_acc,
         'predictions': all_preds,
-        'targets': all_targets
+        'targets': all_targets,
+        'probabilities': all_probs
     }
 
 
@@ -378,7 +386,6 @@ def train_model(
     plt.close(fig)
 
     return model, history
-
 
 
 def create_model_name(signal_type: str, model_type: str) -> str:

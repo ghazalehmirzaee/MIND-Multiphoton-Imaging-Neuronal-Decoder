@@ -1,10 +1,8 @@
+"""Data processing functions."""
 import os
 import numpy as np
 import pandas as pd
-from scipy.signal import savgol_filter
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, RobustScaler, MinMaxScaler
-from typing import Dict, Optional, Tuple, Union, Any, List
+from typing import Dict, Any, List, Optional, Tuple, Union
 import logging
 from tqdm import tqdm
 
@@ -17,42 +15,6 @@ from mind.data.loader import (
 from mind.utils.experiment_tracking import log_metrics, log_figures
 
 logger = logging.getLogger(__name__)
-
-
-def smooth_signals(
-        data: np.ndarray,
-        window_length: int = 5,
-        polyorder: int = 2
-) -> np.ndarray:
-    """
-    Apply Savitzky-Golay filter to smooth signals.
-
-    Parameters
-    ----------
-    data : np.ndarray
-        Input data with shape (frames, neurons)
-    window_length : int, optional
-        Length of the filter window (must be odd), by default 5
-    polyorder : int, optional
-        Order of the polynomial, by default 2
-
-    Returns
-    -------
-    np.ndarray
-        Smoothed data
-    """
-    smoothed_data = np.zeros_like(data)
-    n_frames, n_neurons = data.shape
-
-    for i in range(n_neurons):
-        smoothed_data[:, i] = savgol_filter(
-            data[:, i],
-            window_length=window_length,
-            polyorder=polyorder,
-            mode='nearest'
-        )
-
-    return smoothed_data
 
 
 def create_sliding_windows(
@@ -98,38 +60,6 @@ def create_sliding_windows(
     return np.array(windows), np.array(window_labels)
 
 
-def normalize_data(
-        data: np.ndarray,
-        scaler_type: str = 'robust'
-) -> Tuple[np.ndarray, Union[StandardScaler, RobustScaler, MinMaxScaler]]:
-    """
-    Normalize the data using the specified scaler.
-
-    Parameters
-    ----------
-    data : np.ndarray
-        Input data to normalize
-    scaler_type : str, optional
-        Type of scaler to use ('standard', 'robust', 'minmax'), by default 'robust'
-
-    Returns
-    -------
-    Tuple[np.ndarray, Union[StandardScaler, RobustScaler, MinMaxScaler]]
-        Normalized data and the fitted scaler
-    """
-    if scaler_type == 'standard':
-        scaler = StandardScaler()
-    elif scaler_type == 'robust':
-        scaler = RobustScaler()
-    elif scaler_type == 'minmax':
-        scaler = MinMaxScaler()
-    else:
-        raise ValueError(f"Invalid scaler type: {scaler_type}")
-
-    normalized_data = scaler.fit_transform(data)
-    return normalized_data, scaler
-
-
 def calculate_class_weights(y_train: np.ndarray) -> Dict[int, float]:
     """
     Calculate class weights inversely proportional to class frequencies.
@@ -171,32 +101,38 @@ def calculate_class_weights(y_train: np.ndarray) -> Dict[int, float]:
     logger.info(f"Calculated class weights: {class_weights}")
     return class_weights
 
+
 def process_data(
         neural_data: Dict[str, np.ndarray],
         config: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
-    Process neural data with sliding windows and prepare for ML with minimal preprocessing.
-    This version removes aggressive optimizations while ensuring deconvolved signals can show
-    their natural advantages.
+    Process neural data with sliding windows for binary classification.
+    Does not apply normalization or other preprocessing as per requirements.
+
+    Parameters
+    ----------
+    neural_data : Dict[str, np.ndarray]
+        Dictionary containing neural data
+    config : Dict[str, Any]
+        Configuration dictionary
+
+    Returns
+    -------
+    Dict[str, Any]
+        Dictionary containing processed data
     """
-    logger.info("Processing data with sliding windows")
+    logger.info("Processing data with sliding windows for binary classification")
 
     # Extract configuration
     window_size = config['data']['window_size']
     step_size = config['data']['step_size']
-
-    # Simplified preprocessing configuration - removed unnecessary options
-    normalize = config['processing'].get('normalize', True)
-    scaler_type = config['processing'].get('scaler', 'robust')
 
     # Validate input data
     required_keys = ['calcium_signal', 'deltaf_cells_not_excluded', 'deconv_mat_wanted', 'labels']
     for key in required_keys:
         if key not in neural_data:
             raise ValueError(f"Missing required key in neural_data: {key}")
-        if not isinstance(neural_data[key], np.ndarray):
-            raise ValueError(f"Key {key} in neural_data is not a numpy array: {type(neural_data[key])}")
 
     # Extract data
     calcium_signal = neural_data['calcium_signal']
@@ -214,7 +150,7 @@ def process_data(
     logger.info(f"ΔF/F neurons: {n_deltaf_neurons}")
     logger.info(f"Deconvolved neurons: {n_deconv_neurons}")
 
-    # Basic NaN handling - this is essential preprocessing, not optimization
+    # Handle NaN values (basic preprocessing)
     if np.isnan(calcium_signal).any():
         logger.warning("calcium_signal contains NaN values")
         calcium_signal = np.nan_to_num(calcium_signal, nan=0.0)
@@ -225,70 +161,44 @@ def process_data(
         logger.warning("deconv_mat_wanted contains NaN values")
         deconv_mat_wanted = np.nan_to_num(deconv_mat_wanted, nan=0.0)
 
-    # Convert to float - basic data preparation
-    calcium_signal = calcium_signal.astype(np.float64)
-    deltaf_cells_not_excluded = deltaf_cells_not_excluded.astype(np.float64)
-    deconv_mat_wanted = deconv_mat_wanted.astype(np.float64)
-    labels = labels.astype(np.int32)
+    # Ensure binary classification (0 = no footstep, 1 = contralateral footstep)
+    binary_labels = labels.copy()
+    binary_labels[binary_labels > 1] = 0  # Convert ipsilateral (2) to no footstep (0)
 
-    # REMOVED: Smoothing signals - removed this preprocessing step
-    # We'll use raw signals directly
+    # Count label distribution
+    unique_labels, counts = np.unique(binary_labels, return_counts=True)
+    logger.info("Binary label distribution:")
+    for lbl, cnt in zip(unique_labels, counts):
+        logger.info(f"  Label {int(lbl)}: {cnt} frames")
 
-    # Create sliding windows
+    # Create sliding windows without normalization
     logger.info(f"Creating sliding windows (size={window_size}, step={step_size})")
     try:
-        X_calcium, y_calcium = create_sliding_windows(calcium_signal, labels, window_size, step_size)
-        X_deltaf, y_deltaf = create_sliding_windows(deltaf_cells_not_excluded, labels, window_size, step_size)
-        X_deconv, y_deconv = create_sliding_windows(deconv_mat_wanted, labels, window_size, step_size)
+        X_calcium, y_calcium = create_sliding_windows(calcium_signal, binary_labels, window_size, step_size)
+        X_deltaf, y_deltaf = create_sliding_windows(deltaf_cells_not_excluded, binary_labels, window_size, step_size)
+        X_deconv, y_deconv = create_sliding_windows(deconv_mat_wanted, binary_labels, window_size, step_size)
     except Exception as e:
         logger.error(f"Error creating sliding windows: {e}")
         raise ValueError(f"Failed to create sliding windows: {e}")
 
     logger.info(f"Created {X_calcium.shape[0]} windows for each signal type")
 
-    # Normalize data if requested - basic but necessary normalization
-    scalers = {}
-    if normalize:
-        logger.info(f"Normalizing data using {scaler_type} scaler")
-        try:
-            X_calcium_norm, scaler_calcium = normalize_data(X_calcium, scaler_type)
-            X_deltaf_norm, scaler_deltaf = normalize_data(X_deltaf, scaler_type)
-            X_deconv_norm, scaler_deconv = normalize_data(X_deconv, scaler_type)
-
-            scalers = {
-                'calcium': scaler_calcium,
-                'deltaf': scaler_deltaf,
-                'deconv': scaler_deconv
-            }
-        except Exception as e:
-            logger.warning(f"Error during normalization: {e}. Falling back to original data.")
-            X_calcium_norm = X_calcium
-            X_deltaf_norm = X_deltaf
-            X_deconv_norm = X_deconv
-    else:
-        X_calcium_norm = X_calcium
-        X_deltaf_norm = X_deltaf
-        X_deconv_norm = X_deconv
-
-    # REMOVED: Signal-specific optimizations for deconvolved signals
-
     # Prepare processed data dictionary
     processed_data = {
-        'X_calcium': X_calcium_norm,
+        'X_calcium': X_calcium,
         'y_calcium': y_calcium,
-        'X_deltaf': X_deltaf_norm,
+        'X_deltaf': X_deltaf,
         'y_deltaf': y_deltaf,
-        'X_deconv': X_deconv_norm,
+        'X_deconv': X_deconv,
         'y_deconv': y_deconv,
         'window_size': window_size,
         'n_calcium_neurons': n_calcium_neurons,
         'n_deltaf_neurons': n_deltaf_neurons,
         'n_deconv_neurons': n_deconv_neurons,
-        'scalers': scalers,
         'raw_calcium': calcium_signal,
         'raw_deltaf': deltaf_cells_not_excluded,
         'raw_deconv': deconv_mat_wanted,
-        'binary_task': True  # Set this to True for binary classification
+        'binary_task': True  # Indicate binary classification
     }
 
     logger.info("Data processing completed successfully")
@@ -314,6 +224,8 @@ def split_data(
     Dict[str, Any]
         Dictionary containing split data
     """
+    from sklearn.model_selection import train_test_split
+
     logger.info("Splitting data into train, validation, and test sets")
 
     # Extract configuration
@@ -334,7 +246,7 @@ def split_data(
             X, y,
             test_size=test_size,
             random_state=random_state,
-            stratify=y
+            stratify=y  # Ensure balanced classes
         )
 
         # Second split: training vs validation
@@ -344,7 +256,7 @@ def split_data(
             X_train_val, y_train_val,
             test_size=adjusted_val_size,
             random_state=random_state,
-            stratify=y_train_val
+            stratify=y_train_val  # Ensure balanced classes
         )
 
         # Store splits
@@ -358,12 +270,10 @@ def split_data(
         # Print class distribution
         for subset_name, y_subset in [('train', y_train), ('validation', y_val), ('test', y_test)]:
             class_counts = np.bincount(y_subset.astype(int))
-            logger.info(f"{subset_name} set class distribution:")
+            logger.info(f"{subset_name} set class distribution ({signal_type}):")
             logger.info(f"  No footstep (0): {class_counts[0]} samples")
             if len(class_counts) > 1:
                 logger.info(f"  Right foot (1): {class_counts[1]} samples")
-            if len(class_counts) > 2:
-                logger.info(f"  Left foot (2): {class_counts[2]} samples")
 
     # Calculate class weights for each signal type
     class_weights = {}
@@ -380,10 +290,11 @@ def split_data(
             result[f'raw_{signal_type}'] = processed_data[f'raw_{signal_type}']
 
     # Add metadata
-    for key in ['window_size', 'n_calcium_neurons', 'n_deltaf_neurons', 'n_deconv_neurons', 'scalers']:
+    for key in ['window_size', 'n_calcium_neurons', 'n_deltaf_neurons', 'n_deconv_neurons', 'binary_task']:
         if key in processed_data:
             result[key] = processed_data[key]
 
+    logger.info("Data splitting completed successfully")
     return result
 
 
@@ -406,14 +317,22 @@ def main(config: Dict[str, Any]) -> Dict[str, Any]:
         f"Starting data processing with window_size={config['data']['window_size']}, step_size={config['data']['step_size']}")
 
     # Load data
-    matlab_file = config['data']['matlab_file']
-    behavior_file = config['data']['behavior_file']
+    matlab_file = config['data']['file']
+    behavior_file = config['data'].get('behavior_file')
 
+    # Load neural data from MATLAB file
     neural_data = load_matlab_data(matlab_file)
-    behavior_df = load_behavioral_data(behavior_file)
 
-    # Align neural and behavioral data
-    neural_data = align_neural_behavioral_data(neural_data, behavior_df)
+    # If behavior file is provided, load and align behavioral data
+    if behavior_file:
+        behavior_df = load_behavioral_data(behavior_file)
+        neural_data = align_neural_behavioral_data(neural_data, behavior_df,
+                                                   binary_task=config['data'].get('binary_task', True))
+    elif 'labels' not in neural_data:
+        logger.warning("No behavioral data provided and no labels found in neural data")
+        logger.warning("Creating dummy labels (all zeros)")
+        neural_data['labels'] = np.zeros(neural_data['calcium_signal'].shape[0])
+        neural_data['binary_task'] = True
 
     # Process data
     processed_data = process_data(neural_data, config)
@@ -443,24 +362,3 @@ def main(config: Dict[str, Any]) -> Dict[str, Any]:
 
     return final_data
 
-
-if __name__ == "__main__":
-    import hydra
-    from omegaconf import OmegaConf, DictConfig
-    import logging
-    from mind.utils.logging import setup_logging
-
-
-    @hydra.main(config_path="../config", config_name="default")
-    def process_data_main(cfg: DictConfig) -> None:
-        # Setup logging
-        setup_logging()
-
-        # Convert to dictionary
-        config = OmegaConf.to_container(cfg, resolve=True)
-
-        # Process data
-        main(config)
-
-
-    process_data_main()

@@ -1,16 +1,19 @@
+"""Multi-Layer Perceptron model implementation."""
 import numpy as np
 from sklearn.neural_network import MLPClassifier
 from typing import Dict, Any, Tuple, Optional
 import logging
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
 logger = logging.getLogger(__name__)
+
 
 def create_mlp(
         signal_type: str = None,
         random_state: int = 42
 ) -> MLPClassifier:
     """
-    Create an efficient MLP classifier optimized for the signal type.
+    Create an MLP classifier optimized for the signal type.
 
     Parameters
     ----------
@@ -26,33 +29,50 @@ def create_mlp(
     """
     # Base parameters that work well for all signal types
     base_params = {
-        'hidden_layer_sizes': (64, 32),
+        'hidden_layer_sizes': (128, 64),
         'activation': 'relu',
         'solver': 'adam',
         'alpha': 0.0001,
+        'batch_size': 'auto',
         'learning_rate': 'adaptive',
         'learning_rate_init': 0.001,
-        'max_iter': 200,
+        'max_iter': 300,
         'early_stopping': True,
         'validation_fraction': 0.1,
         'random_state': random_state,
         'verbose': 0,
     }
 
+    # Signal-specific optimizations
+    if signal_type == 'deconv':
+        # Deconvolved signals typically have sparse, spike-like features
+        base_params['hidden_layer_sizes'] = (256, 128, 64)
+        base_params['alpha'] = 0.00005
+    elif signal_type == 'deltaf':
+        # ΔF/F signals have normalized features with various scales
+        base_params['hidden_layer_sizes'] = (192, 96)
+        base_params['activation'] = 'relu'
+    elif signal_type == 'calcium':
+        # Raw calcium signals have high dynamic range
+        base_params['hidden_layer_sizes'] = (128, 64)
+        base_params['alpha'] = 0.0002
+
     # Create and return the model
     return MLPClassifier(**base_params)
 
 
-def optimize_mlp(
+def train_mlp(
         X_train: np.ndarray,
         y_train: np.ndarray,
         X_val: np.ndarray,
         y_val: np.ndarray,
-        signal_type: str = None,
-        random_state: int = 42
+        config: Dict[str, Any],
+        optimize: bool = True,
+        class_weights: Optional[Dict[int, float]] = None,
+        signal_type: Optional[str] = None
 ) -> Tuple[MLPClassifier, Dict[str, Any]]:
     """
-    Train an efficient MLP model.
+    Train an MLP model for binary classification.
 
     Parameters
     ----------
@@ -64,31 +84,37 @@ def optimize_mlp(
         Validation features
     y_val : np.ndarray
         Validation labels
-    signal_type : str, optional
-        Signal type to optimize for
-    random_state : int, optional
-        Random state for reproducibility
+    config : Dict[str, Any]
+        Configuration dictionary
+    optimize : bool, optional
+        Whether to optimize hyperparameters, by default True
+    class_weights : Optional[Dict[int, float]], optional
+        Class weights for imbalanced data, by default None
+    signal_type : Optional[str], optional
+        Signal type for optimization, by default None
 
     Returns
     -------
     Tuple[MLPClassifier, Dict[str, Any]]
         Trained model and evaluation metrics
     """
+    logger.info(f"Training MLP for {signal_type if signal_type else 'general'} data")
+
     # Create model
-    model = create_mlp(signal_type, random_state)
+    model = create_mlp(signal_type, config['experiment'].get('seed', 42))
 
     # Train model
     model.fit(X_train, y_train.astype(int))
 
     # Evaluate model
-    from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-
     y_pred = model.predict(X_val)
 
+    # Get probabilities if available
     try:
         y_prob = model.predict_proba(X_val)
     except:
         y_prob = None
+        logger.warning("Could not obtain class probabilities from MLP model")
 
     # Calculate metrics
     metrics = {
@@ -102,6 +128,13 @@ def optimize_mlp(
 
     if y_prob is not None:
         metrics['probabilities'] = y_prob
+
+    # Log metrics
+    logger.info(f"MLP validation metrics:")
+    logger.info(f"  Accuracy: {metrics['accuracy']:.4f}")
+    logger.info(f"  Precision (macro): {metrics['precision_macro']:.4f}")
+    logger.info(f"  Recall (macro): {metrics['recall_macro']:.4f}")
+    logger.info(f"  F1 (macro): {metrics['f1_macro']:.4f}")
 
     return model, metrics
 
