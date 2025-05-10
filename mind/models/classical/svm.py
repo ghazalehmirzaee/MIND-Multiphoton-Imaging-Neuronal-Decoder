@@ -1,32 +1,32 @@
+"""Support Vector Machine model implementation."""
 import numpy as np
-from sklearn.svm import SVC, LinearSVC
+from sklearn.svm import SVC
 from sklearn.decomposition import PCA
 from typing import Dict, Any, Tuple, Optional
 import logging
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
 logger = logging.getLogger(__name__)
 
+
 def create_svm(
         signal_type: str = None,
-        n_features: int = None,
         random_state: int = 42
 ) -> Tuple[SVC, Optional[PCA]]:
     """
-    Create an efficient SVM classifier optimized for the signal type.
+    Create an SVM classifier optimized for the signal type.
 
     Parameters
     ----------
     signal_type : str, optional
         Signal type to optimize for ('calcium', 'deltaf', or 'deconv')
-    n_features : int, optional
-        Number of features to determine PCA components
     random_state : int, optional
         Random state for reproducibility
 
     Returns
     -------
     Tuple[SVC, Optional[PCA]]
-        Optimized SVM model and PCA transformer (if used)
+        Optimized SVM model and PCA transformer (if needed)
     """
     # Base parameters
     base_params = {
@@ -40,28 +40,44 @@ def create_svm(
         'verbose': 0,
     }
 
+    # Signal-specific optimizations
+    if signal_type == 'deconv':
+        # Deconvolved signals typically have sparse, spike-like features
+        base_params['kernel'] = 'rbf'
+        base_params['C'] = 2.0
+        base_params['gamma'] = 'scale'
+    elif signal_type == 'deltaf':
+        # ΔF/F signals have normalized features with various scales
+        base_params['kernel'] = 'rbf'
+        base_params['C'] = 1.5
+        base_params['gamma'] = 'auto'
+    elif signal_type == 'calcium':
+        # Raw calcium signals have high dynamic range
+        base_params['kernel'] = 'rbf'
+        base_params['C'] = 1.0
+        base_params['gamma'] = 'scale'
+
     # Create SVM model
     model = SVC(**base_params)
 
-    # Apply PCA for dimensionality reduction
-    pca = None
-    if n_features is not None and n_features > 100:
-        n_components = min(100, int(n_features * 0.5))
-        pca = PCA(n_components=n_components, random_state=random_state)
+    # Always set up PCA for dimensionality reduction (input will be large)
+    pca = PCA(n_components=0.95, random_state=random_state)
 
     return model, pca
 
 
-def optimize_svm(
+def train_svm(
         X_train: np.ndarray,
         y_train: np.ndarray,
         X_val: np.ndarray,
         y_val: np.ndarray,
-        signal_type: str = None,
-        random_state: int = 42
+        config: Dict[str, Any],
+        optimize: bool = True,
+        class_weights: Optional[Dict[int, float]] = None,
+        signal_type: Optional[str] = None
 ) -> Tuple[Any, Dict[str, Any], Optional[PCA]]:
     """
-    Train an efficient SVM model.
+    Train an SVM model for binary classification.
 
     Parameters
     ----------
@@ -73,39 +89,43 @@ def optimize_svm(
         Validation features
     y_val : np.ndarray
         Validation labels
-    signal_type : str, optional
-        Signal type to optimize for
-    random_state : int, optional
-        Random state for reproducibility
+    config : Dict[str, Any]
+        Configuration dictionary
+    optimize : bool, optional
+        Whether to optimize hyperparameters, by default True
+    class_weights : Optional[Dict[int, float]], optional
+        Class weights for imbalanced data, by default None
+    signal_type : Optional[str], optional
+        Signal type for optimization, by default None
 
     Returns
     -------
     Tuple[Any, Dict[str, Any], Optional[PCA]]
-        Trained model, evaluation metrics, and PCA transformer (if used)
+        Trained model, evaluation metrics, and PCA transformer
     """
-    # Create model with PCA if needed
-    model, pca = create_svm(signal_type, X_train.shape[1], random_state)
+    logger.info(f"Training SVM for {signal_type if signal_type else 'general'} data")
 
-    # Apply PCA if needed
-    if pca is not None:
-        X_train_transformed = pca.fit_transform(X_train)
-        X_val_transformed = pca.transform(X_val)
-    else:
-        X_train_transformed = X_train
-        X_val_transformed = X_val
+    # Create model with PCA
+    model, pca = create_svm(signal_type, config['experiment'].get('seed', 42))
+
+    # Apply class weights if provided
+    if class_weights is not None:
+        model.class_weight = class_weights
+
+    # Apply PCA transformation
+    logger.info("Applying PCA transformation for dimensionality reduction")
+    X_train_pca = pca.fit_transform(X_train)
+    X_val_pca = pca.transform(X_val)
+
+    logger.info(f"PCA reduced dimensions from {X_train.shape[1]} to {X_train_pca.shape[1]}")
 
     # Train model
-    model.fit(X_train_transformed, y_train.astype(int))
+    logger.info("Training SVM model...")
+    model.fit(X_train_pca, y_train.astype(int))
 
     # Evaluate model
-    from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-
-    y_pred = model.predict(X_val_transformed)
-
-    try:
-        y_prob = model.predict_proba(X_val_transformed)
-    except:
-        y_prob = None
+    y_pred = model.predict(X_val_pca)
+    y_prob = model.predict_proba(X_val_pca)
 
     # Calculate metrics
     metrics = {
@@ -114,11 +134,16 @@ def optimize_svm(
         'recall_macro': recall_score(y_val, y_pred, average='macro', zero_division=0),
         'f1_macro': f1_score(y_val, y_pred, average='macro', zero_division=0),
         'predictions': y_pred,
+        'probabilities': y_prob,
         'targets': y_val
     }
 
-    if y_prob is not None:
-        metrics['probabilities'] = y_prob
+    # Log metrics
+    logger.info(f"SVM validation metrics:")
+    logger.info(f"  Accuracy: {metrics['accuracy']:.4f}")
+    logger.info(f"  Precision (macro): {metrics['precision_macro']:.4f}")
+    logger.info(f"  Recall (macro): {metrics['recall_macro']:.4f}")
+    logger.info(f"  F1 (macro): {metrics['f1_macro']:.4f}")
 
     return model, metrics, pca
 

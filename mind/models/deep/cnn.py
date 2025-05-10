@@ -1,3 +1,4 @@
+"""Convolutional Neural Network model implementation."""
 import torch
 import torch.nn as nn
 from typing import Dict, Any, List, Optional, Tuple
@@ -25,15 +26,36 @@ class CNNModel(nn.Module):
     ):
         """
         Initialize the CNN model with auto-adaptive architecture.
+
+        Parameters
+        ----------
+        input_size : int
+            Number of input features (neurons)
+        window_size : int
+            Window size (time steps)
+        n_classes : int
+            Number of output classes
+        channels : List[int], optional
+            List of channel sizes for convolutional layers, by default [64, 128, 256]
+        kernel_size : int, optional
+            Kernel size for convolutional layers, by default 3
+        dropout_rate : float, optional
+            Dropout rate, by default 0.5
+        batch_norm : bool, optional
+            Whether to use batch normalization, by default True
+        signal_type : str, optional
+            Signal type to optimize for, by default None
         """
         super(CNNModel, self).__init__()
 
-        # Enhanced architecture for deconvolved signals
+        # Enhanced architecture for different signal types
         if signal_type == 'deconv':
+            # Deconvolved signals have sparse, spike-like features
             channels = [96, 192, 384]
             kernel_size = 5
             dropout_rate = 0.4
         elif signal_type == 'deltaf':
+            # ΔF/F signals have normalized features
             channels = [80, 160, 320]
             kernel_size = 4
 
@@ -83,11 +105,17 @@ class CNNModel(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Forward pass with adaptive feature handling.
-        """
-        # Apply a slight input scaling boost for deconvolved signals
-        if self.signal_type == 'deconv':
-            x = x * 1.08
 
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input tensor
+
+        Returns
+        -------
+        torch.Tensor
+            Output tensor
+        """
         # Transform from [batch, time_steps, features] to [batch, features, time_steps]
         if x.dim() == 3:
             x = x.permute(0, 2, 1)
@@ -127,7 +155,6 @@ class CNNModel(nn.Module):
         x = self.fc2(x)
 
         return x
-
 
     def get_activation_maps(self, x: torch.Tensor) -> Dict[str, torch.Tensor]:
         """
@@ -205,6 +232,7 @@ class CNNModel(nn.Module):
         activations['combined'] = final_out
 
         return activations
+
 
 def create_cnn(
         input_size: int,

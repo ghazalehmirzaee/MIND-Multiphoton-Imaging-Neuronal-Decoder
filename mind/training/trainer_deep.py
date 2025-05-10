@@ -102,7 +102,6 @@ def create_scheduler(
 
     return create_one_cycle_scheduler
 
-
 def train_fcnn_model(
         data: Dict[str, Any],
         signal_type: str,
@@ -112,58 +111,9 @@ def train_fcnn_model(
 ) -> Tuple[nn.Module, Dict[str, Any]]:
     """
     Train a Fully Connected Neural Network model with signal-specific optimizations.
-
-    Parameters
-    ----------
-    data : Dict[str, Any]
-        Dictionary containing the processed data
-    signal_type : str
-        Signal type ('calcium', 'deltaf', or 'deconv')
-    config : Dict[str, Any]
-        Configuration dictionary
-    device : torch.device
-        Device to use for training
-    wandb_run : Any, optional
-        Weights & Biases run, by default None
-
-    Returns
-    -------
-    Tuple[nn.Module, Dict[str, Any]]
-        Trained model and training history
+    Modified to ensure binary classification.
     """
     logger.info(f"Training FCNN model for {signal_type} signal")
-
-def train_random_forest(X_train, y_train, X_val, y_val, config, optimize=True, class_weights=None, signal_type=None):
-    """Train a Random Forest model for binary classification."""
-    logger.info(f"Training Random Forest for {signal_type if signal_type else 'general'} data")
-
-    # Create model
-    model = create_random_forest(signal_type, config['experiment'].get('seed', 42))
-
-    # Apply class weights if provided
-    if class_weights is not None:
-        model.class_weight = class_weights
-
-    # Train model - convert to binary classification
-    model.fit(X_train, y_train.astype(int))
-
-    # Evaluate model
-    y_pred = model.predict(X_val)
-    y_prob = model.predict_proba(X_val)
-
-    # Calculate metrics
-    metrics = {
-        'accuracy': accuracy_score(y_val, y_pred),
-        'precision_macro': precision_score(y_val, y_pred, average='macro', zero_division=0),
-        'recall_macro': recall_score(y_val, y_pred, average='macro', zero_division=0),
-        'f1_macro': f1_score(y_val, y_pred, average='macro', zero_division=0),
-        'predictions': y_pred,
-        'probabilities': y_prob,
-        'targets': y_val
-    }
-
-    return model, metrics
-
 
     # Create dataloaders
     dataloaders = create_dataloaders(
@@ -175,7 +125,7 @@ def train_random_forest(X_train, y_train, X_val, y_val, config, optimize=True, c
 
     # Extract metadata
     input_dim = dataloaders['input_dim']
-    n_classes = dataloaders['n_classes']
+    n_classes = 2  # Ensure binary classification (0 and 1)
     train_loader = dataloaders['train_loader']
     val_loader = dataloaders['val_loader']
 
@@ -222,19 +172,19 @@ def train_random_forest(X_train, y_train, X_val, y_val, config, optimize=True, c
             config['training'].get('batch_size', 32)
         )
 
-    # Get class weights if available
+    # Get class weights
     class_weights = data.get('class_weights', {}).get(signal_type, None)
 
-    # Create loss function based on signal type
+    # Create loss function - optimized for binary classification
     if signal_type == 'deconv':
         # Use focal loss for deconvolved signals to better handle class imbalance
         criterion = FocalLoss(alpha=2.0, gamma=2.0)
     elif class_weights is not None:
-        # Convert to PyTorch tensor
-        weight_tensor = torch.ones(n_classes, device=device)
+        # Convert to PyTorch tensor for binary classification
+        weight_tensor = torch.ones(2, device=device)
         for cls, weight in class_weights.items():
             cls_idx = int(cls)
-            if cls_idx < n_classes:
+            if cls_idx < 2:  # Ensure binary (0 or 1)
                 weight_tensor[cls_idx] = weight
 
         criterion = nn.CrossEntropyLoss(weight=weight_tensor)

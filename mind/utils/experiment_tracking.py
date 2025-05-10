@@ -25,7 +25,8 @@ def log_metrics(
     metrics : Dict[str, float]
         Dictionary containing metrics to log
     """
-    wandb_run.log(metrics)
+    if wandb_run is not None:
+        wandb_run.log(metrics)
 
 
 def log_figures(
@@ -42,8 +43,9 @@ def log_figures(
     figures : Dict[str, plt.Figure]
         Dictionary containing figures to log
     """
-    for name, fig in figures.items():
-        wandb_run.log({name: wandb.Image(fig)})
+    if wandb_run is not None:
+        for name, fig in figures.items():
+            wandb_run.log({name: wandb.Image(fig)})
 
 
 def log_model(
@@ -63,13 +65,14 @@ def log_model(
     model_name : str
         Name of the model
     """
-    artifact = wandb.Artifact(
-        name=model_name,
-        type='model',
-        description=f'Trained {model_name} model'
-    )
-    artifact.add_file(model_path)
-    wandb_run.log_artifact(artifact)
+    if wandb_run is not None:
+        artifact = wandb.Artifact(
+            name=model_name,
+            type='model',
+            description=f'Trained {model_name} model'
+        )
+        artifact.add_file(model_path)
+        wandb_run.log_artifact(artifact)
 
 
 def log_results(
@@ -89,13 +92,14 @@ def log_results(
     results_name : str
         Name of the results
     """
-    artifact = wandb.Artifact(
-        name=results_name,
-        type='results',
-        description=f'{results_name} results'
-    )
-    artifact.add_file(results_path)
-    wandb_run.log_artifact(artifact)
+    if wandb_run is not None:
+        artifact = wandb.Artifact(
+            name=results_name,
+            type='results',
+            description=f'{results_name} results'
+        )
+        artifact.add_file(results_path)
+        wandb_run.log_artifact(artifact)
 
 
 def init_wandb(
@@ -118,20 +122,24 @@ def init_wandb(
     Returns
     -------
     Any
-        Weights & Biases run
+        Weights & Biases run object or None if initialization fails
     """
-    # Generate a unique experiment name if not provided
-    if experiment_name is None:
-        experiment_name = f"experiment_{int(time.time())}"
+    try:
+        # Generate a unique experiment name if not provided
+        if experiment_name is None:
+            experiment_name = f"experiment_{int(time.time())}"
 
-    # Initialize run
-    wandb_run = wandb.init(
-        project=project_name,
-        name=experiment_name,
-        config=config
-    )
-
-    return wandb_run
+        # Initialize run
+        wandb_run = wandb.init(
+            project=project_name,
+            name=experiment_name,
+            config=config
+        )
+        return wandb_run
+    except Exception as e:
+        logger.error(f"Error initializing W&B: {e}")
+        logger.warning("Continuing without W&B tracking")
+        return None
 
 
 def save_config(
@@ -151,9 +159,28 @@ def save_config(
     # Create output directory
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
+    # Convert numpy types to Python native types
+    def convert_np_to_python(obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, dict):
+            return {k: convert_np_to_python(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [convert_np_to_python(item) for item in obj]
+        else:
+            return obj
+
+    config_json = convert_np_to_python(config)
+
     # Save configuration to JSON file
     with open(output_file, 'w') as f:
-        json.dump(config, f, indent=4)
+        json.dump(config_json, f, indent=4)
+
+    logger.info(f"Configuration saved to {output_file}")
 
 
 def load_config(
@@ -182,3 +209,4 @@ def load_config(
         config = json.load(f)
 
     return config
+

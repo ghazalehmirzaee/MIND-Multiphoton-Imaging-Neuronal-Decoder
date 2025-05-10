@@ -1,3 +1,4 @@
+"""Random Forest model implementation."""
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from typing import Dict, Any, Tuple, Optional
@@ -6,12 +7,13 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 
 logger = logging.getLogger(__name__)
 
+
 def create_random_forest(
         signal_type: str = None,
         random_state: int = 42
 ) -> RandomForestClassifier:
     """
-    Create an efficient Random Forest classifier optimized for the signal type.
+    Create a Random Forest classifier optimized for the signal type.
 
     Parameters
     ----------
@@ -27,8 +29,8 @@ def create_random_forest(
     """
     # Base parameters that work well for all signal types
     base_params = {
-        'n_estimators': 50,
-        'max_depth': 15,
+        'n_estimators': 200,
+        'max_depth': 30,
         'min_samples_split': 5,
         'min_samples_leaf': 2,
         'class_weight': 'balanced',
@@ -39,32 +41,70 @@ def create_random_forest(
         'verbose': 0,
     }
 
+    # Signal-specific optimizations
+    if signal_type == 'deconv':
+        # Deconvolved signals typically have sparse, spike-like features
+        base_params['n_estimators'] = 250
+        base_params['min_samples_split'] = 4
+    elif signal_type == 'deltaf':
+        # ΔF/F signals have normalized features with various scales
+        base_params['max_depth'] = 25
+    elif signal_type == 'calcium':
+        # Raw calcium signals have high dynamic range
+        base_params['min_samples_leaf'] = 3
+
     # Create and return the model
     return RandomForestClassifier(**base_params)
 
 
-def optimize_random_forest(
+def train_random_forest(
         X_train: np.ndarray,
         y_train: np.ndarray,
         X_val: np.ndarray,
         y_val: np.ndarray,
-        signal_type: str = None,
-        random_state: int = 42
+        config: Dict[str, Any],
+        optimize: bool = True,
+        class_weights: Optional[Dict[int, float]] = None,
+        signal_type: Optional[str] = None
 ) -> Tuple[RandomForestClassifier, Dict[str, Any]]:
+    """
+    Train a Random Forest model for binary classification.
+
+    Parameters
+    ----------
+    X_train : np.ndarray
+        Training features
+    y_train : np.ndarray
+        Training labels
+    X_val : np.ndarray
+        Validation features
+    y_val : np.ndarray
+        Validation labels
+    config : Dict[str, Any]
+        Configuration dictionary
+    optimize : bool, optional
+        Whether to optimize hyperparameters, by default True
+    class_weights : Optional[Dict[int, float]], optional
+        Class weights for imbalanced data, by default None
+    signal_type : Optional[str], optional
+        Signal type for optimization, by default None
+
+    Returns
+    -------
+    Tuple[RandomForestClassifier, Dict[str, Any]]
+        Trained model and evaluation metrics
+    """
+    logger.info(f"Training Random Forest for {signal_type if signal_type else 'general'} data")
+
     # Create model
-    model = create_random_forest(signal_type, random_state)
+    model = create_random_forest(signal_type, config['experiment'].get('seed', 42))
 
-    # Ensure X_train and X_val are numeric arrays
-    if isinstance(X_train, dict) or np.any(
-            [isinstance(x, dict) for x in X_train.flatten() if hasattr(X_train, 'flatten')]):
-        raise ValueError("X_train contains dictionary values. Check your data preprocessing.")
-
-    if isinstance(X_val, dict) or np.any([isinstance(x, dict) for x in X_val.flatten() if hasattr(X_val, 'flatten')]):
-        raise ValueError("X_val contains dictionary values. Check your data preprocessing.")
+    # Apply class weights if provided
+    if class_weights is not None:
+        model.class_weight = class_weights
 
     # Train model
     model.fit(X_train, y_train.astype(int))
-
 
     # Evaluate model
     y_pred = model.predict(X_val)
@@ -80,6 +120,13 @@ def optimize_random_forest(
         'probabilities': y_prob,
         'targets': y_val
     }
+
+    # Log metrics
+    logger.info(f"Random Forest validation metrics:")
+    logger.info(f"  Accuracy: {metrics['accuracy']:.4f}")
+    logger.info(f"  Precision (macro): {metrics['precision_macro']:.4f}")
+    logger.info(f"  Recall (macro): {metrics['recall_macro']:.4f}")
+    logger.info(f"  F1 (macro): {metrics['f1_macro']:.4f}")
 
     return model, metrics
 
