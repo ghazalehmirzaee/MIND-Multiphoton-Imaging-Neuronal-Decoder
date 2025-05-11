@@ -1,101 +1,114 @@
-# Updated Configuration for MIND - mind/config/default.yaml
-experiment:
-  name: default_experiment
-  seed: 42
-  output_dir: results
-  binary_task: true  # Binary classification (0=no footstep, 1=contralateral)
+# mind/config/default.yaml
+# Default configuration for MIND project
 
+# Data configuration
 data:
-  matlab_file: data/raw/SFL13_5_8112021_002_new.mat
-  behavior_file: data/raw/SFL13_5_8112021_002_new.xlsx
+  # Data paths
+  neural_path: "data/raw/SFL13_5_8112021_002_new.mat"
+  behavior_path: "data/raw/SFL13_5_8112021_002_new.xlsx"
+
+  # Binary classification (no footstep vs. contralateral footstep)
+  binary_task: true
+
+  # Sliding window parameters
   window_size: 15
   step_size: 1
-  test_size: 0.2
+
+  # Train/val/test split
+  test_size: 0.15
   val_size: 0.15
-  signal_types: ["calcium", "deltaf", "deconv"]
-  binary_task: true  # binary classification
+  random_state: 42
 
-processing:
-  normalize: false  # As per requirement, do not normalize data
-  smooth: false     # As per requirement, do not apply smoothing
-  perform_pca: false  # Only for SVM if needed
-
-training:
-  batch_size: 32
-  epochs: 100
-  learning_rate: 0.001
-  weight_decay: 1e-5
-  optimizer: adamw
-  scheduler: onecycle
-  optimize_hyperparams: false
-  early_stopping:
-    patience: 15
-    min_delta: 0.001
-
+# Model configuration
 models:
-  classical_types: ["random_forest", "svm", "mlp"]
-  deep_types: ["fcnn", "cnn"]
+  # Random Forest
+  random_forest:
+    n_estimators: 200
+    max_depth: 30
+    min_samples_split: 5
+    min_samples_leaf: 2
+    max_features: "sqrt"
+    class_weight: "balanced"
+    optimize_hyperparams: false
+    random_state: 42
 
-  classical:
-    random_forest:
-      n_estimators: 200
-      max_depth: 30
-      min_samples_split: 5
-      min_samples_leaf: 2
-      class_weight: balanced
-    svm:
-      kernel: rbf
-      C: 1.0
-      gamma: scale
-      class_weight: balanced
-      probability: true
-      pca: true
-      pca_components: 0.95
-    mlp:
-      hidden_layer_sizes: [128, 64]
-      activation: relu
-      solver: adam
-      alpha: 0.0001
-      learning_rate: adaptive
-      early_stopping: true
+  # SVM
+  svm:
+    C: 1.0
+    kernel: "rbf"
+    gamma: "scale"
+    class_weight: "balanced"
+    apply_pca: true
+    pca_components: 0.95
+    optimize_hyperparams: false
+    random_state: 42
 
-  deep:
-    fcnn:
-      hidden_sizes: [256, 128, 64]
-      dropout_rates: [0.4, 0.4, 0.3]
-      batch_norm: true
-    cnn:
-      channels: [64, 128, 256]
-      kernel_size: 3
-      dropout_rate: 0.5
-      batch_norm: true
+  # MLP
+  mlp:
+    hidden_layer_sizes: [64, 128, 32]
+    activation: "relu"
+    solver: "adam"
+    alpha: 0.0001
+    batch_size: "auto"
+    learning_rate: "adaptive"
+    learning_rate_init: 0.001
+    max_iter: 500
+    early_stopping: true
+    validation_fraction: 0.1
+    optimize_hyperparams: false
+    random_state: 42
 
+  # FCNN
+  fcnn:
+    hidden_sizes: [256, 128, 64]
+    dropout_rates: [0.3, 0.3, 0.3]
+    batch_norm: true
+    learning_rate: 0.001
+    weight_decay: 0.00001
+    batch_size: 32
+    num_epochs: 100
+    early_stopping_patience: 15
+    random_state: 42
+
+  # CNN
+  cnn:
+    filter_sizes: [64, 128, 256]
+    kernel_size: 3
+    use_residual: true
+    use_batch_norm: true
+    learning_rate: 0.001
+    weight_decay: 0.00001
+    batch_size: 32
+    num_epochs: 100
+    early_stopping_patience: 15
+    use_focal_loss: true
+    focal_loss_gamma: 2.0
+    random_state: 42
+
+# Visualization configuration
 visualization:
-  style: default
-  figsize: [12, 8]
-  dpi: 300
-  save_format: png
-  show_plots: false  # Set to true to display plots during execution
-  num_neurons:
-    traces: 20
-    comparison: 5
-    heatmap: 250
-    distribution: 250
-  colors:
-    calcium: "#0072B2"  # Blue
-    deltaf: "#E69F00"   # Orange
-    deconv: "#009E73"   # Green
-    background: "#f5f5f5"  # Light gray
+  # Signal visualization
+  signals:
+    num_neurons: 20
+    figsize: [20, 15]
 
-  # Define colormaps for different signal types
-  colormaps:
-    calcium: "Blues"
-    deltaf: "Oranges"
-    deconv: "Greens"
+  # Feature importance visualization
+  feature_importance:
+    top_n: 20
+    figsize: [12, 8]
 
-wandb:
-  project: MIND
-  entity: mirzaeeghazal
-  log_artifacts: true
-  log_figures: true
+  # Performance visualization
+  performance:
+    figsize: [12, 8]
+
+# Output configuration
+output:
+  # Output directory
+  dir: "results"
+
+  # Model directory
+  model_dir: "results/models"
+
+  # Visualization directory
+  viz_dir: "results/visualizations"
 

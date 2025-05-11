@@ -1,309 +1,162 @@
-"""Data loading functions."""
+# mind/data/loader.py
 import os
 import numpy as np
-import scipy.io as sio
 import pandas as pd
-from typing import Dict, Optional, Tuple, Union, Any
-import logging
+import h5py
+import hdf5storage
+from typing import Dict, Tuple, List, Optional
 
-logger = logging.getLogger(__name__)
 
 def load_matlab_data(file_path: str) -> Dict[str, np.ndarray]:
     """
-    Load calcium imaging data from MATLAB files.
+    Load MATLAB .mat file containing calcium imaging data.
+
+    Parameters
+    ----------
+    file_path : str
+        Path to MATLAB file
+
+    Returns
+    -------
+    Dict[str, np.ndarray]
+        Dictionary containing the following keys:
+        - 'calcium_signal': Raw calcium signal (2999 x 764)
+        - 'deltaf': ∆F/F signal (2999 x 581)
+        - 'deconv': Deconvolved signal (2999 x 581)
     """
-    logger.info(f"Loading MATLAB data from {file_path}")
+    print(f"Loading MATLAB data from {file_path}")
+    data = {}
 
-    try:
-        mat_data = sio.loadmat(file_path)
+    # Load MATLAB file
+    mat_data = hdf5storage.loadmat(file_path)
 
-        # Extract the three specific signal types
-        calcium_signal = mat_data['calciumsignal']  # Raw signal
-        deltaf_cells_not_excluded = mat_data['deltaf_cells_not_excluded']  # ΔF/F
-        deconv_mat_wanted = mat_data['DeconvMat_wanted']  # Deconvolved
+    # Extract signals
+    data['calcium_signal'] = mat_data.get('calciumsignal', None)
+    data['deltaf'] = mat_data.get('deltaf_cells_not_excluded', None)
+    data['deconv'] = mat_data.get('DeconvMat_wanted', None)
 
-        # Extract valid neuron indices for reference
-        valid_neurons = mat_data['cells_not_excluded'].flatten() - 1  # 0-based indexing
+    # Ensure all required data is loaded
+    missing_keys = [key for key, val in data.items() if val is None]
+    if missing_keys:
+        print(f"Warning: Missing data keys: {missing_keys}")
 
-        # Check for behavioral labels
-        warnings = []
-        if 'behavioral_labels' not in mat_data:
-            warnings.append('No labels found in MATLAB file')
+    # Print shapes to verify data
+    for key, val in data.items():
+        if val is not None:
+            print(f"  {key}: {val.shape}")
 
-        logger.info(f"Loaded data dimensions:")
-        logger.info(f"Calcium signal: {calcium_signal.shape}")
-        logger.info(f"ΔF/F (valid neurons): {deltaf_cells_not_excluded.shape}")
-        logger.info(f"Deconvolved (valid neurons): {deconv_mat_wanted.shape}")
-        logger.info(f"Number of valid neurons: {len(valid_neurons)}")
+    return data
 
-        result = {
-            'calcium_signal': calcium_signal,
-            'deltaf_cells_not_excluded': deltaf_cells_not_excluded,
-            'deconv_mat_wanted': deconv_mat_wanted,
-            'valid_neurons': valid_neurons,
-            'warnings': warnings
-        }
 
-        return result
-
-    except Exception as e:
-        logger.error(f"Error loading MATLAB file: {e}")
-        raise
-    
-
-def load_behavioral_data(file_path: str) -> pd.DataFrame:
+def load_behavior_data(file_path: str) -> pd.DataFrame:
     """
     Load behavioral data from Excel file.
 
     Parameters
     ----------
     file_path : str
-        Path to the behavioral data file
+        Path to Excel file containing behavioral data
 
     Returns
     -------
     pd.DataFrame
         DataFrame containing behavioral data
     """
-    logger.info(f"Loading behavioral data from {file_path}")
-
+    print(f"Loading behavioral data from {file_path}")
     try:
-        # Determine file extension
-        _, ext = os.path.splitext(file_path)
-
-        if ext.lower() == '.xlsx' or ext.lower() == '.xls':
-            # Excel file
-            behavior_df = pd.read_excel(file_path)
-        elif ext.lower() == '.csv':
-            # CSV file
-            behavior_df = pd.read_csv(file_path)
-        else:
-            raise ValueError(f"Unsupported file format: {ext}")
-
-        # Verify required columns
-        required_columns = ['Video', 'Total Reach', 'Foot (L/R)', 'Frame Start', 'Frame End', 'Frames']
-        missing_columns = [col for col in required_columns if col not in behavior_df.columns]
-
-        if missing_columns:
-            logger.warning(f"Missing columns in behavioral data: {missing_columns}")
-
-        logger.info(f"Loaded behavioral data with {len(behavior_df)} events")
-        return behavior_df
-
+        behavior_data = pd.read_excel(file_path)
+        print(f"  Loaded behavioral data with {len(behavior_data)} entries")
+        return behavior_data
     except Exception as e:
-        logger.error(f"Error loading behavioral data: {e}")
-        raise
+        print(f"Error loading behavioral data: {e}")
+        return pd.DataFrame()
 
 
-def align_neural_behavioral_data(neural_data: Dict[str, np.ndarray],
-                                 behavior_df: pd.DataFrame,
-                                 binary_task: bool = True) -> Dict[str, np.ndarray]:
+def align_neural_behavior(neural_data: Dict[str, np.ndarray],
+                          behavior_data: pd.DataFrame,
+                          binary_task: bool = True) -> Dict[str, np.ndarray]:
     """
-    Align neural recording frames with behavioral events.
+    Align neural data with behavioral events and create frame labels.
+
+    Parameters
+    ----------
+    neural_data : Dict[str, np.ndarray]
+        Dictionary containing neural signals
+    behavior_data : pd.DataFrame
+        DataFrame containing behavioral data
+    binary_task : bool, optional
+        If True, create binary labels (0: no footstep, 1: contralateral footstep)
+        If False, create multiclass labels (0: no footstep, 1: contralateral, 2: ipsilateral)
+
+    Returns
+    -------
+    Dict[str, np.ndarray]
+        Dictionary with neural data and additional 'labels' key containing frame labels
     """
-    logger.info("Aligning neural and behavioral data")
-
-    # Extract frame information
-    frame_starts = behavior_df['Frame Start'].values if 'Frame Start' in behavior_df else []
-    frame_ends = behavior_df['Frame End'].values if 'Frame End' in behavior_df else []
-    foot_sides = behavior_df['Foot (L/R)'].values if 'Foot (L/R)' in behavior_df else []
-
-    # Create label array
+    print("Aligning neural data with behavior...")
+    # Initialize labels with zeros (no footstep)
     num_frames = neural_data['calcium_signal'].shape[0]
-    labels = np.zeros(num_frames)
+    labels = np.zeros(num_frames, dtype=int)
 
-    # If behavioral data is insufficient, create synthetic labels
-    if len(frame_starts) == 0 or 'No labels found' in neural_data.get('warnings', []):
-        logger.warning("Creating synthetic binary labels for testing")
-        # Generate synthetic contralateral footstep events (approximately 30% of frames)
-        np.random.seed(42)  # For reproducibility
+    # Process each behavioral event
+    for _, row in behavior_data.iterrows():
+        start_frame = int(row['Frame Start']) if 'Frame Start' in row else int(row['Frame_Start'])
+        end_frame = int(row['Frame End']) if 'Frame End' in row else int(row['Frame_End'])
+        foot = row['Foot (L/R)'] if 'Foot (L/R)' in row else row['Foot']
 
-        # Create blocks of class 1 events (more realistic than random distribution)
-        for i in range(5):  # Create 5 blocks of contralateral events
-            start_idx = np.random.randint(0, num_frames - 200)
-            end_idx = min(start_idx + np.random.randint(50, 150), num_frames)
-            labels[start_idx:end_idx] = 1
+        # Make sure frames are within bounds
+        start_frame = max(0, min(start_frame, num_frames - 1))
+        end_frame = max(0, min(end_frame, num_frames - 1))
 
-        # Count instances of each class
-        class_counts = np.bincount(labels.astype(int))
-        logger.info(f"Created synthetic labels with distribution:")
-        logger.info(f"No footstep (0): {class_counts[0]} frames")
-        logger.info(f"Right foot (1): {class_counts[1]} frames")
-    else:
-        # Original labeling logic
+        # Assign labels based on foot
         if binary_task:
-            # Binary task: 0 for No footstep, 1 for RIGHT foot (contralateral) only
-            for i in range(len(frame_starts)):
-                start = int(frame_starts[i])
-                end = int(frame_ends[i])
-
-                if start < num_frames and end < num_frames:
-                    # Only label RIGHT foot (contralateral) as 1
-                    if foot_sides[i] == 'R':
-                        labels[start:end + 1] = 1
+            # Only label contralateral (right) footsteps as 1, ignore ipsilateral
+            if foot == 'R':
+                labels[start_frame:end_frame + 1] = 1
         else:
-            # Original multi-class labeling
-            for i in range(len(frame_starts)):
-                start = int(frame_starts[i])
-                end = int(frame_ends[i])
+            # Label contralateral (right) as 1, ipsilateral (left) as 2
+            if foot == 'R':
+                labels[start_frame:end_frame + 1] = 1
+            elif foot == 'L':
+                labels[start_frame:end_frame + 1] = 2
 
-                if start < num_frames and end < num_frames:
-                    label_value = 1 if foot_sides[i] == 'R' else 2
-                    labels[start:end + 1] = label_value
-
-        # Count instances of each class
-        class_counts = np.bincount(labels.astype(int))
-        logger.info(f"Label distribution:")
-        logger.info(f"No footstep (0): {class_counts[0]} frames")
-        logger.info(f"Right foot (1): {class_counts[1]} frames")
-        if len(class_counts) > 2:
-            logger.info(f"Left foot (2): {class_counts[2]} frames")
-
-    # Add labels to neural data
+    # Add labels to the data dictionary
     neural_data['labels'] = labels
-    neural_data['binary_task'] = binary_task
+
+    # Print label distribution
+    unique, counts = np.unique(labels, return_counts=True)
+    label_dist = dict(zip(unique, counts))
+    print(f"  Label distribution: {label_dist}")
 
     return neural_data
 
 
-def load_processed_data(file_path: str = None) -> Dict[str, Any]:
+def load_dataset(neural_path: str, behavior_path: str, binary_task: bool = True) -> Dict[str, np.ndarray]:
     """
-    Load preprocessed data from NPZ file or process MATLAB file directly.
+    Load and align neural and behavioral data.
 
     Parameters
     ----------
-    file_path : str, optional
-        Path to the NPZ file or MATLAB file. If None, will look in default location.
+    neural_path : str
+        Path to MATLAB file containing neural data
+    behavior_path : str
+        Path to Excel file containing behavioral data
+    binary_task : bool, optional
+        If True, create binary classification task (no footstep vs contralateral)
 
     Returns
     -------
-    Dict[str, Any]
-        Dictionary containing preprocessed data
+    Dict[str, np.ndarray]
+        Dictionary containing neural signals and frame labels
     """
-    logger.info(f"Loading processed data")
+    # Load neural data
+    neural_data = load_matlab_data(neural_path)
 
-    # If file_path is not provided, look in the default location
-    if file_path is None:
-        # Get the project root directory
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-        # Look in the default processed data directory
-        processed_dir = os.path.join(project_root, 'data', 'processed')
+    # Load behavioral data
+    behavior_data = load_behavior_data(behavior_path)
 
-        # Find all NPZ files in the directory
-        processed_files = [f for f in os.listdir(processed_dir) if f.endswith('.npz')]
+    # Align neural and behavioral data
+    aligned_data = align_neural_behavior(neural_data, behavior_data, binary_task)
 
-        if not processed_files:
-            logger.error(f"No processed data files found in {processed_dir}")
-            raise FileNotFoundError(f"No processed data files found in {processed_dir}")
-
-        # Use the first file or ask the user to specify if multiple files exist
-        if len(processed_files) > 1:
-            logger.warning(f"Multiple processed data files found: {processed_files}")
-            logger.warning(f"Using the first file: {processed_files[0]}")
-
-        file_path = os.path.join(processed_dir, processed_files[0])
-
-    try:
-        # Check if file is a MATLAB file
-        if file_path.lower().endswith('.mat'):
-            logger.info(f"Detected MATLAB file: {file_path}")
-
-            # Load MATLAB data
-            from mind.data.loader import load_matlab_data
-            from mind.data.processor import process_data, split_data
-
-            # Load the MATLAB file
-            neural_data = load_matlab_data(file_path)
-
-            # Check if labels exist, if not create dummy labels
-            if 'labels' not in neural_data:
-                logger.warning(f"No labels found in MATLAB file, creating dummy labels")
-                neural_data['labels'] = np.zeros(neural_data['calcium_signal'].shape[0])
-
-            # Create a basic config for processing
-            config = {
-                'data': {
-                    'window_size': 15,  # Default window size
-                    'step_size': 1,  # Default step size
-                    'binary_task': True
-                },
-                'experiment': {
-                    'seed': 42
-                }
-            }
-
-            # Process the data
-            logger.info(f"Processing MATLAB data")
-            processed_data = process_data(neural_data, config)
-
-            # Split the data
-            logger.info(f"Splitting data into train/val/test sets")
-            data_dict = split_data(processed_data, config)
-
-            # Add the matlab file path to the data dictionary
-            data_dict['matlab_file'] = file_path
-
-            logger.info(f"Successfully processed MATLAB file")
-            return data_dict
-
-        else:
-            # Attempt to load as NPZ file
-            logger.info(f"Loading processed data from {file_path}")
-            data = np.load(file_path, allow_pickle=True)
-            data_dict = {key: data[key] for key in data.files}
-
-            # Convert object arrays to appropriate types
-            for key in data_dict:
-                if isinstance(data_dict[key], np.ndarray) and data_dict[key].dtype == np.dtype('O'):
-                    if key == 'scalers' or key == 'class_weights':
-                        data_dict[key] = data_dict[key].item()
-
-            logger.info(f"Successfully loaded processed data")
-            return data_dict
-
-    except Exception as e:
-        logger.error(f"Error loading data: {e}")
-        raise
-
-
-def save_processed_data(data_dict: Dict[str, Any], file_path: str = None) -> None:
-    """
-    Save preprocessed data to NPZ file.
-
-    Parameters
-    ----------
-    data_dict : Dict[str, Any]
-        Dictionary containing data to save
-    file_path : str, optional
-        Path to save the NPZ file. If None, will save in default location.
-    """
-    # If file_path is not provided, save to the default location
-    if file_path is None:
-        # Get the project root directory
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-        # Default processed data directory
-        processed_dir = os.path.join(project_root, 'data', 'processed')
-
-        # Create default filename from the first MATLAB file if available
-        if 'matlab_file' in data_dict:
-            matlab_file = data_dict['matlab_file']
-            filename = f"{os.path.basename(matlab_file).split('.')[0]}_processed.npz"
-        else:
-            # Use a timestamp if no MATLAB file is available
-            import time
-            filename = f"processed_data_{int(time.time())}.npz"
-
-        file_path = os.path.join(processed_dir, filename)
-
-    logger.info(f"Saving processed data to {file_path}")
-
-    # Create directory if it doesn't exist
-    os.makedirs(os.path.dirname(file_path), exist_ok=True)
-
-    try:
-        np.savez(file_path, **data_dict)
-        logger.info(f"Data successfully saved to {file_path}")
-    except Exception as e:
-        logger.error(f"Error saving processed data: {e}")
-        raise
+    return aligned_data
 
