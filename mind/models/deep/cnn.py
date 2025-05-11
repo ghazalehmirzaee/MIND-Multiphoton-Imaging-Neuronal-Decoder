@@ -691,4 +691,3 @@ class CNNModel:
 
         return self.feature_importances_
 
-    
