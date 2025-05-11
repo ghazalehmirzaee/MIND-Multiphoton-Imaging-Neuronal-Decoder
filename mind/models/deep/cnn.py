@@ -22,25 +22,6 @@ class CNN(nn.Module):
                  use_batch_norm: bool = True):
         """
         Initialize CNN model.
-
-        Parameters
-        ----------
-        input_size : int
-            Size of input features
-        window_size : int
-            Size of the sliding window
-        num_neurons : int
-            Number of neurons in the input
-        filter_sizes : List[int], optional
-            Number of filters in each convolutional layer
-        kernel_size : int, optional
-            Size of convolutional kernel
-        output_size : int, optional
-            Number of output classes
-        use_residual : bool, optional
-            Whether to use residual connections
-        use_batch_norm : bool, optional
-            Whether to use batch normalization
         """
         super(CNN, self).__init__()
 
@@ -48,45 +29,45 @@ class CNN(nn.Module):
         self.num_neurons = num_neurons
         self.use_residual = use_residual
 
-        # Reshape input to (batch_size, 1, window_size, num_neurons)
-        # for 2D convolution along time and neurons
+        # Create convolutional layers - treating each neuron as a separate feature
+        # Input shape will be [batch_size, 1, window_size * num_neurons]
 
-        # Create convolutional layers
-        self.conv_layers = nn.ModuleList()
-        input_channels = 1
+        # First conv layer
+        self.conv1 = nn.Sequential(
+            nn.Conv1d(1, filter_sizes[0], kernel_size, padding=kernel_size // 2),
+            nn.BatchNorm1d(filter_sizes[0]) if use_batch_norm else nn.Identity(),
+            nn.ReLU()
+        )
 
-        for i, num_filters in enumerate(filter_sizes):
-            # Convolutional layer
-            conv_layer = nn.Conv1d(
-                in_channels=input_channels if i == 0 else filter_sizes[i - 1],
-                out_channels=num_filters,
-                kernel_size=kernel_size,
-                padding=kernel_size // 2  # Same padding
-            )
+        # Second conv layer
+        self.conv2 = nn.Sequential(
+            nn.Conv1d(filter_sizes[0], filter_sizes[1], kernel_size, padding=kernel_size // 2),
+            nn.BatchNorm1d(filter_sizes[1]) if use_batch_norm else nn.Identity(),
+            nn.ReLU()
+        )
 
-            # Create a block with conv, batch norm, and activation
-            block = []
-            block.append(conv_layer)
+        # Third conv layer
+        self.conv3 = nn.Sequential(
+            nn.Conv1d(filter_sizes[1], filter_sizes[2], kernel_size, padding=kernel_size // 2),
+            nn.BatchNorm1d(filter_sizes[2]) if use_batch_norm else nn.Identity(),
+            nn.ReLU()
+        )
 
-            if use_batch_norm:
-                block.append(nn.BatchNorm1d(num_filters))
-
-            block.append(nn.ReLU())
-
-            # Add block to conv_layers
-            self.conv_layers.append(nn.Sequential(*block))
-
-        # Calculate size after convolutions
-        final_conv_size = filter_sizes[-1] * window_size
+        # Calculate the size after convolutions
+        conv_output_size = filter_sizes[2] * (window_size * num_neurons)
 
         # Fully connected layers
         self.fc_layers = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(final_conv_size, 128),
+            nn.Linear(conv_output_size, 128),
             nn.ReLU(),
             nn.Dropout(0.3),
             nn.Linear(128, output_size)
         )
+
+        # For residual connection
+        if use_residual:
+            self.residual_conv = nn.Conv1d(1, filter_sizes[2], 1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -102,44 +83,34 @@ class CNN(nn.Module):
         torch.Tensor
             Output tensor
         """
-        # Reshape input to (batch_size, 1, window_size * num_neurons)
-        # Assuming x is (batch_size, window_size * num_neurons)
         batch_size = x.size(0)
 
-        # Reshape to (batch_size, num_neurons, window_size)
-        x_reshaped = x.view(batch_size, self.num_neurons, self.window_size)
+        # Reshape to [batch_size, 1, window_size * num_neurons]
+        # Treating the entire signal as a 1D sequence
+        x_reshaped = x.view(batch_size, 1, -1)
 
-        # Apply convolutional layers
-        residual = None
-        for i, conv_layer in enumerate(self.conv_layers):
-            if i == 0:
-                # Save input for residual connection
-                if self.use_residual:
-                    residual = x_reshaped
+        # Apply first conv layer
+        out = self.conv1(x_reshaped)
 
-                # Apply first conv layer
-                x_reshaped = conv_layer(x_reshaped)
-            else:
-                # Apply subsequent conv layers
-                x_reshaped = conv_layer(x_reshaped)
+        # Apply second conv layer
+        out = self.conv2(out)
 
-                # Add residual connection if specified
-                if self.use_residual and i == len(self.conv_layers) - 1 and residual is not None:
-                    # Ensure residual has the same shape as current output
-                    if residual.size(1) != x_reshaped.size(1):
-                        # Apply 1x1 convolution to match number of channels
-                        residual = nn.Conv1d(
-                            residual.size(1), x_reshaped.size(1), kernel_size=1
-                        ).to(residual.device)(residual)
+        # Apply third conv layer with residual connection
+        out3 = self.conv3(out)
 
-                    # Add residual connection
-                    x_reshaped = x_reshaped + residual
+        # Add residual connection if specified
+        if self.use_residual:
+            # Apply 1x1 convolution to match channels
+            residual = self.residual_conv(x_reshaped)
+            # Add residual connection
+            if residual.size() == out3.size():
+                out3 = out3 + residual
 
         # Apply fully connected layers
-        output = self.fc_layers(x_reshaped)
+        output = self.fc_layers(out3)
 
         return output
-
+    
 
 class CNNModel:
     """
