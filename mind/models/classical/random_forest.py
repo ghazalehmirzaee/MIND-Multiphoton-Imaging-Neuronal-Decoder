@@ -201,4 +201,3 @@ class RandomForestModel:
 
         return self.feature_importances_
 
-    
