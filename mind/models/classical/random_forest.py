@@ -1,169 +1,204 @@
-"""Random Forest model implementation."""
+# mind/models/classical/random_forest.py
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
-from typing import Dict, Any, Tuple, Optional
-import logging
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-
-logger = logging.getLogger(__name__)
+from sklearn.model_selection import RandomizedSearchCV
+import joblib
+from typing import Dict, Any, Optional
 
 
-def create_random_forest(
-        signal_type: str = None,
-        random_state: int = 42
-) -> RandomForestClassifier:
+class RandomForestModel:
     """
-    Create a Random Forest classifier optimized for the signal type.
-
-    Parameters
-    ----------
-    signal_type : str, optional
-        Signal type to optimize for ('calcium', 'deltaf', or 'deconv')
-    random_state : int, optional
-        Random state for reproducibility
-
-    Returns
-    -------
-    RandomForestClassifier
-        Optimized Random Forest model
+    Random Forest model for neural signal classification.
     """
-    # Base parameters that work well for all signal types
-    base_params = {
-        'n_estimators': 200,
-        'max_depth': 30,
-        'min_samples_split': 5,
-        'min_samples_leaf': 2,
-        'class_weight': 'balanced',
-        'random_state': random_state,
-        'n_jobs': -1,  # Use all cores
-        'bootstrap': True,
-        'max_features': 'sqrt',
-        'verbose': 0,
-    }
 
-    # Signal-specific optimizations
-    if signal_type == 'deconv':
-        # Deconvolved signals typically have sparse, spike-like features
-        base_params['n_estimators'] = 250
-        base_params['min_samples_split'] = 4
-    elif signal_type == 'deltaf':
-        # ΔF/F signals have normalized features with various scales
-        base_params['max_depth'] = 25
-    elif signal_type == 'calcium':
-        # Raw calcium signals have high dynamic range
-        base_params['min_samples_leaf'] = 3
+    def __init__(self,
+                 n_estimators: int = 200,
+                 max_depth: Optional[int] = 30,
+                 min_samples_split: int = 5,
+                 min_samples_leaf: int = 2,
+                 max_features: str = 'sqrt',
+                 class_weight: Optional[str] = 'balanced',
+                 random_state: int = 42,
+                 n_jobs: int = -1,
+                 optimize_hyperparams: bool = False):
+        """
+        Initialize Random Forest model.
 
-    # Create and return the model
-    return RandomForestClassifier(**base_params)
+        Parameters
+        ----------
+        n_estimators : int, optional
+            Number of trees in the forest
+        max_depth : int or None, optional
+            Maximum depth of the trees
+        min_samples_split : int, optional
+            Minimum samples required to split a node
+        min_samples_leaf : int, optional
+            Minimum samples required at a leaf node
+        max_features : str, optional
+            Number of features to consider for best split
+        class_weight : str or None, optional
+            Weights associated with classes
+        random_state : int, optional
+            Random seed for reproducibility
+        n_jobs : int, optional
+            Number of jobs to run in parallel
+        optimize_hyperparams : bool, optional
+            Whether to optimize hyperparameters using randomized search
+        """
+        self.params = {
+            'n_estimators': n_estimators,
+            'max_depth': max_depth,
+            'min_samples_split': min_samples_split,
+            'min_samples_leaf': min_samples_leaf,
+            'max_features': max_features,
+            'class_weight': class_weight,
+            'random_state': random_state,
+            'n_jobs': n_jobs
+        }
+        self.optimize_hyperparams = optimize_hyperparams
+        self.model = None
+        self.feature_importances_ = None
 
+    def train(self, X_train: np.ndarray, y_train: np.ndarray,
+              X_val: Optional[np.ndarray] = None,
+              y_val: Optional[np.ndarray] = None) -> Dict[str, Any]:
+        """
+        Train the Random Forest model.
 
-def train_random_forest(
-        X_train: np.ndarray,
-        y_train: np.ndarray,
-        X_val: np.ndarray,
-        y_val: np.ndarray,
-        config: Dict[str, Any],
-        optimize: bool = True,
-        class_weights: Optional[Dict[int, float]] = None,
-        signal_type: Optional[str] = None
-) -> Tuple[RandomForestClassifier, Dict[str, Any]]:
-    """
-    Train a Random Forest model for binary classification.
+        Parameters
+        ----------
+        X_train : np.ndarray
+            Training data
+        y_train : np.ndarray
+            Training labels
+        X_val : np.ndarray, optional
+            Validation data
+        y_val : np.ndarray, optional
+            Validation labels
 
-    Parameters
-    ----------
-    X_train : np.ndarray
-        Training features
-    y_train : np.ndarray
-        Training labels
-    X_val : np.ndarray
-        Validation features
-    y_val : np.ndarray
-        Validation labels
-    config : Dict[str, Any]
-        Configuration dictionary
-    optimize : bool, optional
-        Whether to optimize hyperparameters, by default True
-    class_weights : Optional[Dict[int, float]], optional
-        Class weights for imbalanced data, by default None
-    signal_type : Optional[str], optional
-        Signal type for optimization, by default None
+        Returns
+        -------
+        Dict[str, Any]
+            Dictionary containing training metrics
+        """
+        if self.optimize_hyperparams and X_val is not None and y_val is not None:
+            print("Optimizing hyperparameters...")
+            param_grid = {
+                'n_estimators': [100, 200, 300],
+                'max_depth': [20, 30, 40, None],
+                'min_samples_split': [2, 5, 10],
+                'min_samples_leaf': [1, 2, 4],
+                'max_features': ['sqrt', 'log2', None]
+            }
 
-    Returns
-    -------
-    Tuple[RandomForestClassifier, Dict[str, Any]]
-        Trained model and evaluation metrics
-    """
-    logger.info(f"Training Random Forest for {signal_type if signal_type else 'general'} data")
+            rf = RandomForestClassifier(random_state=self.params['random_state'],
+                                        n_jobs=self.params['n_jobs'],
+                                        class_weight=self.params['class_weight'])
 
-    # Create model
-    model = create_random_forest(signal_type, config['experiment'].get('seed', 42))
+            search = RandomizedSearchCV(
+                rf, param_grid, n_iter=20, cv=3, random_state=self.params['random_state'],
+                scoring='f1_weighted', n_jobs=self.params['n_jobs']
+            )
 
-    # Apply class weights if provided
-    if class_weights is not None:
-        model.class_weight = class_weights
+            search.fit(X_train, y_train)
+            self.model = search.best_estimator_
+            print(f"Best hyperparameters: {search.best_params_}")
+        else:
+            print("Training Random Forest model with fixed hyperparameters...")
+            self.model = RandomForestClassifier(**self.params)
+            self.model.fit(X_train, y_train)
 
-    # Train model
-    model.fit(X_train, y_train.astype(int))
+        # Extract feature importances
+        self.feature_importances_ = self.model.feature_importances_
 
-    # Evaluate model
-    y_pred = model.predict(X_val)
-    y_prob = model.predict_proba(X_val)
+        # Compute training and validation metrics
+        train_acc = self.model.score(X_train, y_train)
+        metrics = {'train_accuracy': train_acc}
 
-    # Calculate metrics
-    metrics = {
-        'accuracy': accuracy_score(y_val, y_pred),
-        'precision_macro': precision_score(y_val, y_pred, average='macro', zero_division=0),
-        'recall_macro': recall_score(y_val, y_pred, average='macro', zero_division=0),
-        'f1_macro': f1_score(y_val, y_pred, average='macro', zero_division=0),
-        'predictions': y_pred,
-        'probabilities': y_prob,
-        'targets': y_val
-    }
+        if X_val is not None and y_val is not None:
+            val_acc = self.model.score(X_val, y_val)
+            metrics['val_accuracy'] = val_acc
 
-    # Log metrics
-    logger.info(f"Random Forest validation metrics:")
-    logger.info(f"  Accuracy: {metrics['accuracy']:.4f}")
-    logger.info(f"  Precision (macro): {metrics['precision_macro']:.4f}")
-    logger.info(f"  Recall (macro): {metrics['recall_macro']:.4f}")
-    logger.info(f"  F1 (macro): {metrics['f1_macro']:.4f}")
+        return metrics
 
-    return model, metrics
+    def predict(self, X: np.ndarray) -> np.ndarray:
+        """
+        Make predictions with the trained model.
 
+        Parameters
+        ----------
+        X : np.ndarray
+            Input data
 
-def extract_feature_importance(
-        model: RandomForestClassifier,
-        window_size: int,
-        n_neurons: int
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Extract feature importance from a trained Random Forest model.
+        Returns
+        -------
+        np.ndarray
+            Predicted labels
+        """
+        if self.model is None:
+            raise ValueError("Model not trained yet. Call train() first.")
 
-    Parameters
-    ----------
-    model : RandomForestClassifier
-        Trained Random Forest model
-    window_size : int
-        Window size used for data processing
-    n_neurons : int
-        Number of neurons
+        return self.model.predict(X)
 
-    Returns
-    -------
-    Tuple[np.ndarray, np.ndarray, np.ndarray]
-        2D feature importance, temporal importance, and neuron importance
-    """
-    # Extract feature importance
-    importance = model.feature_importances_
+    def predict_proba(self, X: np.ndarray) -> np.ndarray:
+        """
+        Get prediction probabilities.
 
-    # Reshape to 2D (window_size, n_neurons)
-    importance_2d = importance.reshape(window_size, n_neurons)
+        Parameters
+        ----------
+        X : np.ndarray
+            Input data
 
-    # Calculate temporal importance (mean across neurons)
-    temporal_importance = np.mean(importance_2d, axis=1)
+        Returns
+        -------
+        np.ndarray
+            Prediction probabilities
+        """
+        if self.model is None:
+            raise ValueError("Model not trained yet. Call train() first.")
 
-    # Calculate neuron importance (mean across time)
-    neuron_importance = np.mean(importance_2d, axis=0)
+        return self.model.predict_proba(X)
 
-    return importance_2d, temporal_importance, neuron_importance
+    def save(self, file_path: str) -> None:
+        """
+        Save the trained model.
 
+        Parameters
+        ----------
+        file_path : str
+            Path to save the model
+        """
+        if self.model is None:
+            raise ValueError("No trained model to save.")
+
+        joblib.dump(self.model, file_path)
+        print(f"Model saved to {file_path}")
+
+    def load(self, file_path: str) -> None:
+        """
+        Load a trained model.
+
+        Parameters
+        ----------
+        file_path : str
+            Path to the saved model
+        """
+        self.model = joblib.load(file_path)
+        self.feature_importances_ = self.model.feature_importances_
+        print(f"Model loaded from {file_path}")
+
+    def get_feature_importances(self) -> np.ndarray:
+        """
+        Get feature importances from the trained model.
+
+        Returns
+        -------
+        np.ndarray
+            Feature importances
+        """
+        if self.feature_importances_ is None:
+            raise ValueError("Feature importances not available. Train the model first.")
+
+        return self.feature_importances_
+
+    
