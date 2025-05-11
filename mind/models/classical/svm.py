@@ -206,4 +206,3 @@ class SVMModel:
         self.pca = model_data['pca']
         print(f"Model loaded from {file_path}")
 
-        
