@@ -1,0 +1,4 @@
+# mind/config/signal_types/deltaf.yaml
+# Configuration for using only deltaf signal
+data:
+  signal_types: ["deltaf"]

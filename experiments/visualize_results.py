@@ -1,14 +1,17 @@
-"""Script to visualize results from model comparison."""
+"""Script to visualize results from model comparison with Hydra configuration."""
 import os
-import argparse
 import json
+import logging
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-import logging
 import wandb
-from typing import Dict, Any, List, Optional, Tuple, Callable
+from typing import Dict, Any, List, Optional
+from datetime import datetime
+import hydra
+from hydra.utils import instantiate
+from omegaconf import DictConfig, OmegaConf
 
 from mind.data.loader import load_processed_data
 from mind.utils.logging import setup_logging
@@ -17,8 +20,8 @@ from mind.visualization.performance import (
     plot_performance_comparison,
     plot_signal_type_comparison,
     plot_model_comparison,
-    plot_binary_confusion_matrices,  # Changed from plot_confusion_matrices
-    plot_binary_roc_curves,  # Changed from plot_roc_curves
+    plot_binary_confusion_matrices,
+    plot_binary_roc_curves,
     create_comparative_performance_grid,
     plot_performance_radar,
     plot_cross_signal_comparison
@@ -28,74 +31,76 @@ from mind.visualization.feature_importance import (
     plot_comparative_feature_importance
 )
 from mind.visualization.signal_visualization import create_signal_visualizations
-from mind.evaluation.metrics import generate_metrics_report  # Added for metrics report
+from mind.evaluation.metrics import generate_metrics_report
 
 
-def parse_args():
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="Visualize results from model comparison.")
+def load_results(file_path: str) -> Dict[str, Any]:
+    """
+    Load results from JSON file.
 
-    # Data parameters
-    parser.add_argument('--data_file', type=str, required=True,
-                        help='Path to processed data file')
-    parser.add_argument('--classical_results', type=str, required=True,
-                        help='Path to classical ML results JSON file')
-    parser.add_argument('--deep_results', type=str, required=True,
-                        help='Path to deep learning results JSON file')
+    Parameters
+    ----------
+    file_path : str
+        Path to the results JSON file
 
-    # W&B parameters
-    parser.add_argument('--project_name', type=str, default='MIND',
-                        help='W&B project name')
-    parser.add_argument('--experiment_name', type=str, default=None,
-                        help='Name for the W&B experiment')
-
-    # Output parameters
-    parser.add_argument('--output_dir', type=str, default='results',
-                        help='Output directory')
-
-    return parser.parse_args()
-
-
-def load_results(file_path):
-    """Load results from JSON file."""
+    Returns
+    -------
+    Dict[str, Any]
+        Loaded results dictionary
+    """
     with open(file_path, 'r') as f:
         results = json.load(f)
     return results
 
 
-def main():
-    """Main function."""
-    # Parse arguments
-    args = parse_args()
+@hydra.main(config_path="../mind/config", config_name="default")
+def main(cfg: DictConfig) -> None:
+    """
+    Main function to visualize model comparison results with Hydra configuration.
+
+    Parameters
+    ----------
+    cfg : DictConfig
+        Hydra configuration object
+    """
+    # Access the working directory (set by Hydra)
+    work_dir = os.getcwd()
 
     # Setup logging
-    setup_logging(log_file=os.path.join(args.output_dir, 'logs', 'visualize_results.log'))
+    log_file = os.path.join(work_dir, 'logs', f'visualize_results_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log')
+    setup_logging(log_file=log_file)
     logger = logging.getLogger(__name__)
-    logger.info("Starting results visualization")
+    logger.info("Starting results visualization with Hydra configuration")
 
     # Initialize W&B
     wandb_run = init_wandb(
-        project_name=args.project_name,
-        experiment_name=args.experiment_name or 'results_visualization'
+        project_name=cfg.wandb.project,
+        experiment_name=cfg.experiment.name or 'results_visualization',
+        config=cfg
     )
 
     # Set plotting style
-    plt.style.use('seaborn-whitegrid')
+    plt.style.use(cfg.visualization.style)
 
     # Load data
-    logger.info(f"Loading data from {args.data_file}")
-    data = load_processed_data(args.data_file)
+    logger.info(f"Loading data from {cfg.data.matlab_file}")
+    data = load_processed_data(cfg.data.matlab_file)
 
     # Load results
-    logger.info(f"Loading classical ML results from {args.classical_results}")
-    classical_results = load_results(args.classical_results)
+    classical_results_path = os.path.join(cfg.experiment.output_dir, 'metrics', 'classical_ml_results.json')
+    deep_results_path = os.path.join(cfg.experiment.output_dir, 'metrics', 'deep_learning_results.json')
 
-    logger.info(f"Loading deep learning results from {args.deep_results}")
-    deep_results = load_results(args.deep_results)
+    logger.info(f"Loading classical ML results from {classical_results_path}")
+    classical_results = load_results(classical_results_path)
+
+    logger.info(f"Loading deep learning results from {deep_results_path}")
+    deep_results = load_results(deep_results_path)
 
     # Create output directories
-    os.makedirs(os.path.join(args.output_dir, 'figures'), exist_ok=True)
-    os.makedirs(os.path.join(args.output_dir, 'metrics'), exist_ok=True)
+    figures_dir = os.path.join(work_dir, 'figures')
+    metrics_dir = os.path.join(work_dir, 'metrics')
+    os.makedirs(figures_dir, exist_ok=True)
+    os.makedirs(metrics_dir, exist_ok=True)
 
     # Combine results
     all_results = {}
@@ -131,7 +136,7 @@ def main():
         # Plot performance comparison
         fig = plot_performance_comparison(
             performance_df,
-            output_file=os.path.join(args.output_dir, 'figures', 'performance_comparison.png')
+            output_file=os.path.join(figures_dir, 'performance_comparison.png')
         )
         if wandb_run:
             wandb_run.log({"performance_comparison": wandb.Image(fig)})
@@ -139,7 +144,7 @@ def main():
         # Plot signal type comparison
         fig = plot_signal_type_comparison(
             performance_df,
-            output_file=os.path.join(args.output_dir, 'figures', 'signal_type_comparison.png')
+            output_file=os.path.join(figures_dir, 'signal_type_comparison.png')
         )
         if wandb_run:
             wandb_run.log({"signal_type_comparison": wandb.Image(fig)})
@@ -147,7 +152,7 @@ def main():
         # Plot model comparison
         fig = plot_model_comparison(
             performance_df,
-            output_file=os.path.join(args.output_dir, 'figures', 'model_comparison.png')
+            output_file=os.path.join(figures_dir, 'model_comparison.png')
         )
         if wandb_run:
             wandb_run.log({"model_comparison": wandb.Image(fig)})
@@ -155,7 +160,7 @@ def main():
         # Plot binary confusion matrices
         cm_figure = plot_binary_confusion_matrices(
             all_results,
-            output_dir=os.path.join(args.output_dir, 'figures')
+            output_dir=figures_dir
         )
         if wandb_run:
             wandb_run.log({"binary_confusion_matrices": wandb.Image(cm_figure)})
@@ -163,7 +168,7 @@ def main():
         # Plot binary ROC curves
         roc_figures = plot_binary_roc_curves(
             all_results,
-            output_dir=os.path.join(args.output_dir, 'figures')
+            output_dir=figures_dir
         )
         if wandb_run:
             for name, fig in roc_figures.items():
@@ -172,7 +177,7 @@ def main():
         # Create comparative performance grid
         fig = create_comparative_performance_grid(
             all_results,
-            output_file=os.path.join(args.output_dir, 'figures', 'comparative_performance_grid.png')
+            output_file=os.path.join(figures_dir, 'comparative_performance_grid.png')
         )
         if wandb_run:
             wandb_run.log({"comparative_performance_grid": wandb.Image(fig)})
@@ -180,7 +185,7 @@ def main():
         # Plot performance radar
         fig = plot_performance_radar(
             all_results,
-            output_file=os.path.join(args.output_dir, 'figures', 'performance_radar.png')
+            output_file=os.path.join(figures_dir, 'performance_radar.png')
         )
         if wandb_run:
             wandb_run.log({"performance_radar": wandb.Image(fig)})
@@ -188,7 +193,7 @@ def main():
         # Plot cross-signal comparison
         fig = plot_cross_signal_comparison(
             all_results,
-            output_file=os.path.join(args.output_dir, 'figures', 'cross_signal_comparison.png')
+            output_file=os.path.join(figures_dir, 'cross_signal_comparison.png')
         )
         if wandb_run:
             wandb_run.log({"cross_signal_comparison": wandb.Image(fig)})
@@ -196,10 +201,9 @@ def main():
         # Generate metrics report
         metrics_report = generate_metrics_report(
             all_results,
-            output_file=os.path.join(args.output_dir, 'metrics', 'metrics_report.json')
+            output_file=os.path.join(metrics_dir, 'metrics_report.json')
         )
-        logger.info(
-            f"Generated metrics report saved to {os.path.join(args.output_dir, 'metrics', 'metrics_report.json')}")
+        logger.info(f"Generated metrics report saved to {os.path.join(metrics_dir, 'metrics_report.json')}")
 
     # Feature importance visualizations
     if 'feature_importance' in classical_results:
@@ -212,7 +216,7 @@ def main():
                 'deltaf': data['n_deltaf_neurons'],
                 'deconv': data['n_deconv_neurons']
             },
-            output_dir=os.path.join(args.output_dir, 'figures')
+            output_dir=figures_dir
         )
 
         # Log figures to W&B
@@ -223,7 +227,7 @@ def main():
         # Create comparative feature importance visualizations
         fi_figures = plot_comparative_feature_importance(
             classical_results['feature_importance'],
-            output_dir=os.path.join(args.output_dir, 'figures')
+            output_dir=figures_dir
         )
 
         # Log figures to W&B
@@ -234,7 +238,7 @@ def main():
     # Signal visualizations
     signal_figures = create_signal_visualizations(
         data,
-        output_dir=os.path.join(args.output_dir, 'figures')
+        output_dir=figures_dir
     )
 
     # Log figures to W&B
@@ -252,4 +256,3 @@ def main():
 if __name__ == "__main__":
     main()
 
-    

@@ -1,34 +1,41 @@
-# Default configuration for MIND
+# Updated Configuration for MIND - mind/config/default.yaml
 experiment:
   name: default_experiment
   seed: 42
   output_dir: results
+  binary_task: true  # Binary classification (0=no footstep, 1=contralateral)
 
 data:
-  matlab_file: /home/ghazal/Documents/NS_Projects/NS_P2_050325/MIND-Multiphoton-Imaging-Neural-Decoder/data/raw/SFL13_5_8112021_002_new.mat
-  behavior_file: /home/ghazal/Documents/NS_Projects/NS_P2_050325/MIND-Multiphoton-Imaging-Neural-Decoder/data/raw/SFL13_5_8112021_002_new.xlsx
+  matlab_file: data/raw/SFL13_5_8112021_002_new.mat
+  behavior_file: data/raw/SFL13_5_8112021_002_new.xlsx
   window_size: 15
   step_size: 1
   test_size: 0.2
   val_size: 0.15
+  signal_types: ["calcium", "deltaf", "deconv"]
+  binary_task: true  # binary classification
 
 processing:
-  normalize: true
-  scaler: robust  # options: standard, robust, minmax
-  smooth: true
-  smooth_window: 5
-  smooth_order: 2
+  normalize: false  # As per requirement, do not normalize data
+  smooth: false     # As per requirement, do not apply smoothing
+  perform_pca: false  # Only for SVM if needed
 
 training:
   batch_size: 32
   epochs: 100
   learning_rate: 0.001
   weight_decay: 1e-5
+  optimizer: adamw
+  scheduler: onecycle
+  optimize_hyperparams: false
   early_stopping:
     patience: 15
     min_delta: 0.001
 
 models:
+  classical_types: ["random_forest", "svm", "mlp"]
+  deep_types: ["fcnn", "cnn"]
+
   classical:
     random_forest:
       n_estimators: 200
@@ -62,24 +69,33 @@ models:
       kernel_size: 3
       dropout_rate: 0.5
       batch_norm: true
-    lstm:
-      hidden_size1: 128
-      hidden_size2: 256
-      dropout_rate: 0.4
-      batch_norm: true
-      bidirectional: true
 
 visualization:
-  style: seaborn-whitegrid
+  style: default
   figsize: [12, 8]
   dpi: 300
   save_format: png
+  show_plots: false  # Set to true to display plots during execution
+  num_neurons:
+    traces: 20
+    comparison: 5
+    heatmap: 250
+    distribution: 250
   colors:
-    calcium: "#1f77b4"
-    deltaf: "#ff7f0e"
-    deconv: "#2ca02c"
+    calcium: "#0072B2"  # Blue
+    deltaf: "#E69F00"   # Orange
+    deconv: "#009E73"   # Green
+    background: "#f5f5f5"  # Light gray
+
+  # Define colormaps for different signal types
+  colormaps:
+    calcium: "Blues"
+    deltaf: "Oranges"
+    deconv: "Greens"
 
 wandb:
   project: MIND
   entity: mirzaeeghazal
   log_artifacts: true
+  log_figures: true
+
