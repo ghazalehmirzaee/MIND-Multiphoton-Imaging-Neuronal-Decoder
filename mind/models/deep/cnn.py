@@ -110,7 +110,7 @@ class CNN(nn.Module):
         output = self.fc_layers(out3)
 
         return output
-    
+
 
 class CNNModel:
     """
@@ -137,47 +137,52 @@ class CNNModel:
                  random_state: int = 42,
                  device: Optional[str] = None):
         """
-        Initialize CNN model wrapper.
+                Initialize CNN model wrapper.
 
-        Parameters
-        ----------
-        input_size : int, optional
-            Size of input features (can be None if determined during training)
-        window_size : int, optional
-            Size of the sliding window
-        num_neurons : int, optional
-            Number of neurons in the input (can be None if determined during training)
-        filter_sizes : List[int], optional
-            Number of filters in each convolutional layer
-        kernel_size : int, optional
-            Size of convolutional kernel
-        output_size : int, optional
-            Number of output classes
-        use_residual : bool, optional
-            Whether to use residual connections
-        use_batch_norm : bool, optional
-            Whether to use batch normalization
-        learning_rate : float, optional
-            Learning rate for optimizer
-        weight_decay : float, optional
-            Weight decay for optimizer
-        batch_size : int, optional
-            Batch size for training
-        num_epochs : int, optional
-            Maximum number of epochs for training
-        early_stopping_patience : int, optional
-            Patience for early stopping
-        use_focal_loss : bool, optional
-            Whether to use focal loss for imbalanced data
-        focal_loss_gamma : float, optional
-            Focusing parameter for focal loss
-        focal_loss_alpha : List[float], optional
-            Class weights for focal loss
-        random_state : int, optional
-            Random seed for reproducibility
-        device : str, optional
-            Device to use for training ('cuda' or 'cpu')
+                Parameters
+                ----------
+                input_size : int, optional
+                    Size of input features (can be None if determined during training)
+                window_size : int, optional
+                    Size of the sliding window
+                num_neurons : int, optional
+                    Number of neurons in the input (can be None if determined during training)
+                filter_sizes : List[int], optional
+                    Number of filters in each convolutional layer
+                kernel_size : int, optional
+                    Size of convolutional kernel
+                output_size : int, optional
+                    Number of output classes
+                use_residual : bool, optional
+                    Whether to use residual connections
+                use_batch_norm : bool, optional
+                    Whether to use batch normalization
+                learning_rate : float, optional
+                    Learning rate for optimizer
+                weight_decay : float, optional
+                    Weight decay for optimizer
+                batch_size : int, optional
+                    Batch size for training
+                num_epochs : int, optional
+                    Maximum number of epochs for training
+                early_stopping_patience : int, optional
+                    Patience for early stopping
+                use_focal_loss : bool, optional
+                    Whether to use focal loss for imbalanced data
+                focal_loss_gamma : float, optional
+                    Focusing parameter for focal loss
+                focal_loss_alpha : List[float], optional
+                    Class weights for focal loss
+                random_state : int, optional
+                    Random seed for reproducibility
+                device : str, optional
+                    Device to use for training ('cuda' or 'cpu')
+                """
+
         """
+        Initialize CNN model wrapper.
+        """
+        # Store parameters
         self.model_args = {
             'input_size': input_size,
             'window_size': window_size,
