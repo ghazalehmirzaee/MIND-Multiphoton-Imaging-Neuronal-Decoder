@@ -5,9 +5,9 @@ import pandas as pd
 import pickle
 from typing import Dict, Any, List, Optional, Tuple
 import logging
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
 from sklearn.model_selection import RandomizedSearchCV, GridSearchCV
 from omegaconf import DictConfig
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix
 
 from mind.models.classical.random_forest import (
     create_random_forest,

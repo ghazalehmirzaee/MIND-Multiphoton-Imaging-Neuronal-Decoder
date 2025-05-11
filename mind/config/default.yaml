@@ -13,7 +13,7 @@ data:
   test_size: 0.2
   val_size: 0.15
   signal_types: ["calcium", "deltaf", "deconv"]
-  binary_task: true  # Ensure binary classification
+  binary_task: true  # binary classification
 
 processing:
   normalize: false  # As per requirement, do not normalize data
