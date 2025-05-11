@@ -241,4 +241,3 @@ class MLPModel:
         self.model = joblib.load(file_path)
         print(f"Model loaded from {file_path}")
 
-        
