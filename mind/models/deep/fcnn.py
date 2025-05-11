@@ -509,4 +509,3 @@ class FCNNModel:
 
         return self.feature_importances_
 
-    
