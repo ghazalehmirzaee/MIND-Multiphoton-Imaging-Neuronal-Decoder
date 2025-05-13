@@ -1,150 +1,216 @@
-# experiments/visualize_results.py
+"""
+Visualize results from experiments.
+"""
 import os
+import sys
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from typing import Dict, List, Optional, Tuple, Any
-import hydra
-from hydra.utils import to_absolute_path
-from omegaconf import DictConfig, OmegaConf
+from pathlib import Path
 import json
+import argparse
+from typing import Dict, List, Any, Optional, Union
 import logging
 
-# Import custom modules
-from mind.data.loader import load_dataset
-from mind.visualization.signal_visualization import (
-    visualize_signals, visualize_signal_comparison, visualize_signals_heatmap
+# Add project root to path
+sys.path.append(str(Path(__file__).parent.parent))
+
+from mind.utils.logging import setup_logging
+from mind.visualization.performance import (
+    plot_performance_bars, plot_confusion_matrix,
+    plot_performance_improvement, plot_performance_radar
+)
+from mind.visualization.feature_importance import (
+    plot_temporal_importance, plot_neuron_importance,
+    plot_importance_heatmap
 )
 
+# Set up logging
+logger = logging.getLogger(__name__)
 
-@hydra.main(config_path="../mind/config", config_name="default")
-def main(cfg: DictConfig) -> None:
+
+def load_results(results_dir: Union[str, Path]) -> Dict[str, Dict[str, Any]]:
     """
-    Script to visualize results from the model comparison experiment.
+    Load experiment results from JSON files.
 
     Parameters
     ----------
-    cfg : DictConfig
-        Hydra configuration
+    results_dir : Union[str, Path]
+        Directory containing result JSON files
+
+    Returns
+    -------
+    Dict[str, Dict[str, Any]]
+        Dictionary of results organized by model name and signal type
     """
+    logger.info(f"Loading results from {results_dir}")
+
+    results_dir = Path(results_dir)
+    results = {}
+
+    # Find all JSON files in the results directory
+    json_files = list(results_dir.glob("*.json"))
+    logger.info(f"Found {len(json_files)} result files")
+
+    for json_file in json_files:
+        try:
+            # Load JSON file
+            with open(json_file, 'r') as f:
+                result_data = json.load(f)
+
+            # Get metadata
+            metadata = result_data.get('metadata', {})
+            model_name = metadata.get('model_name')
+            signal_type = metadata.get('signal_type')
+
+            # Skip files without proper metadata
+            if model_name is None or signal_type is None:
+                logger.warning(f"Skipping file {json_file} due to missing metadata")
+                continue
+
+            # Add to results dictionary
+            if model_name not in results:
+                results[model_name] = {}
+
+            results[model_name][signal_type] = result_data
+
+            logger.info(f"Loaded results for {model_name} on {signal_type}")
+
+        except Exception as e:
+            logger.error(f"Error loading {json_file}: {e}")
+
+    return results
+
+
+def create_performance_dataframe(results: Dict[str, Dict[str, Any]]) -> pd.DataFrame:
+    """
+    Create a DataFrame of performance metrics from results.
+
+    Parameters
+    ----------
+    results : Dict[str, Dict[str, Any]]
+        Dictionary of results
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame of performance metrics
+    """
+    data = []
+
+    for model_name, model_results in results.items():
+        for signal_type, signal_results in model_results.items():
+            # Get metrics
+            metrics = signal_results.get('metrics', {})
+
+            # Add row to data
+            data.append({
+                'Model': model_name,
+                'Signal Type': signal_type,
+                'Accuracy': metrics.get('accuracy', 0.0),
+                'Precision': metrics.get('precision', 0.0),
+                'Recall': metrics.get('recall', 0.0),
+                'F1 Score': metrics.get('f1_score', 0.0),
+                'ROC AUC': metrics.get('roc_auc', 0.0) if 'roc_auc' in metrics else np.nan,
+                'Train Time': signal_results.get('train_time', 0.0)
+            })
+
+    return pd.DataFrame(data)
+
+
+def main():
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description="Visualize experiment results")
+    parser.add_argument("--results_dir", type=str, default="outputs/results",
+                        help="Directory containing result files")
+    parser.add_argument("--output_dir", type=str, default="outputs/figures",
+                        help="Directory to save figures")
+    parser.add_argument("--format", type=str, default="png", choices=["png", "pdf", "svg"],
+                        help="Format for output figures")
+
+    args = parser.parse_args()
+
     # Set up logging
-    logging.basicConfig(level=logging.INFO,
-                        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    logger = logging.getLogger(__name__)
+    setup_logging(log_level='INFO', console=True)
 
-    # Print configuration
-    logger.info(f"Configuration:\n{OmegaConf.to_yaml(cfg)}")
+    try:
+        # Load results
+        results = load_results(args.results_dir)
 
-    # Convert relative paths to absolute paths
-    neural_path = to_absolute_path(cfg.data.neural_path)
-    behavior_path = to_absolute_path(cfg.data.behavior_path)
-    output_dir = to_absolute_path(cfg.output.dir)
-    viz_dir = to_absolute_path(cfg.output.viz_dir)
-    os.makedirs(viz_dir, exist_ok=True)
+        if not results:
+            logger.error(f"No results found in {args.results_dir}")
+            return
 
-    # Load results
-    results_path = os.path.join(output_dir, "performance_metrics.json")
-    if os.path.exists(results_path):
-        with open(results_path, 'r') as f:
-            results = json.load(f)
-        logger.info(f"Loaded results from {results_path}")
-    else:
-        logger.error(f"Results file not found: {results_path}")
-        results = {}
+        # Create output directory
+        output_dir = Path(args.output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Create visualizations
-    if results:
-        # Create bar plots for each metric
-        metrics = ['accuracy', 'precision', 'recall', 'f1_score']
-        signal_types = list(results.keys())
-        model_names = list(results[signal_types[0]].keys())
+        # Create performance DataFrame
+        df = create_performance_dataframe(results)
 
-        for metric in metrics:
-            fig, ax = plt.subplots(figsize=(12, 8))
+        # Save performance table to CSV
+        df.to_csv(output_dir / "performance_table.csv", index=False)
+        logger.info(f"Saved performance table to {output_dir / 'performance_table.csv'}")
 
-            # Prepare data for plotting
-            metric_data = []
-            for signal_type in signal_types:
-                for model_name in model_names:
-                    metric_data.append({
-                        'Signal Type': signal_type,
-                        'Model': model_name,
-                        metric.capitalize(): results[signal_type][model_name][metric]
-                    })
-            df = pd.DataFrame(metric_data)
+        # Create performance visualizations
+        logger.info("Creating performance visualizations")
 
-            # Plot grouped bar chart
-            sns.barplot(x='Model', y=metric.capitalize(), hue='Signal Type', data=df, ax=ax)
+        # Radar charts
+        plot_performance_radar(df, output_dir=output_dir)
 
-            # Set labels and title
-            ax.set_title(f'Model {metric.capitalize()} Comparison', fontsize=16)
-            ax.set_xlabel('Model', fontsize=14)
-            ax.set_ylabel(metric.capitalize(), fontsize=14)
+        # Bar charts for each metric
+        for metric in ['Accuracy', 'Precision', 'Recall', 'F1 Score']:
+            plot_performance_bars(df, metric=metric, output_dir=output_dir)
 
-            # Adjust legend
-            ax.legend(title='Signal Type', fontsize=12)
+        # Performance improvement chart
+        plot_performance_improvement(df, output_dir=output_dir)
 
-            # Save figure
-            plt.tight_layout()
-            plt.savefig(os.path.join(viz_dir, f"model_{metric}_comparison.png"), dpi=300, bbox_inches='tight')
-            plt.close()
+        # Confusion matrices
+        for model_name, model_results in results.items():
+            for signal_type, signal_results in model_results.items():
+                confusion_matrix = np.array(signal_results.get('confusion_matrix', []))
+                if confusion_matrix.size > 0:
+                    plot_confusion_matrix(
+                        confusion_matrix, model_name, signal_type, output_dir=output_dir
+                    )
 
-        # Create heatmap of all metrics
-        for signal_type in signal_types:
-            fig, ax = plt.subplots(figsize=(10, 8))
+        # Feature importance visualizations
+        logger.info("Creating feature importance visualizations")
 
-            # Prepare data for heatmap
-            heatmap_data = []
-            for model_name in model_names:
-                model_metrics = results[signal_type][model_name]
-                heatmap_data.append([
-                    model_metrics[metric] for metric in metrics
-                ])
+        for model_name, model_results in results.items():
+            for signal_type, signal_results in model_results.items():
+                # Get importance summary
+                importance_summary = signal_results.get('importance_summary', {})
 
-            # Create heatmap
-            sns.heatmap(heatmap_data, annot=True, fmt=".3f", cmap="YlGnBu",
-                        xticklabels=[m.capitalize() for m in metrics],
-                        yticklabels=model_names, ax=ax)
+                if importance_summary:
+                    # Get importance matrix
+                    importance_matrix = np.array(importance_summary.get('importance_matrix', []))
 
-            # Set title
-            ax.set_title(f'Performance Metrics Heatmap - {signal_type}', fontsize=16)
+                    if importance_matrix.size > 0:
+                        # Plot temporal importance
+                        plot_temporal_importance(
+                            importance_matrix, model_name, signal_type, output_dir=output_dir
+                        )
 
-            # Save figure
-            plt.tight_layout()
-            plt.savefig(os.path.join(viz_dir, f"metrics_heatmap_{signal_type}.png"), dpi=300, bbox_inches='tight')
-            plt.close()
+                        # Plot neuron importance
+                        top_neuron_indices = np.array(importance_summary.get('top_neuron_indices', []))
+                        if top_neuron_indices.size > 0:
+                            plot_neuron_importance(
+                                importance_matrix, top_neuron_indices, model_name, signal_type, output_dir=output_dir
+                            )
 
-    # Create additional signal visualizations
-    logger.info("Creating signal visualizations...")
+                        # Plot importance heatmap
+                        plot_importance_heatmap(
+                            importance_matrix, model_name, signal_type, output_dir=output_dir
+                        )
 
-    # Load data
-    data = load_dataset(neural_path, behavior_path, cfg.data.binary_task)
+        logger.info(f"All visualizations saved to {output_dir}")
 
-    # Visualize signals
-    visualize_signals(data,
-                      num_neurons=cfg.visualization.signals.num_neurons,
-                      output_dir=viz_dir,
-                      save_filename="raw_signals_detailed.png",
-                      figsize=(25, 20))
-
-    # Visualize signal comparison with more neurons
-    visualize_signal_comparison(data,
-                                num_neurons=10,
-                                output_dir=viz_dir,
-                                save_filename="signal_comparison_detailed.png",
-                                figsize=(25, 20))
-
-    # Visualize heatmap with more neurons
-    visualize_signals_heatmap(data,
-                              num_neurons=250,
-                              output_dir=viz_dir,
-                              save_filename="signals_heatmap_detailed.png",
-                              figsize=(25, 20))
-
-    logger.info("Visualization complete.")
+    except Exception as e:
+        logger.error(f"Error visualizing results: {e}", exc_info=True)
 
 
 if __name__ == "__main__":
     main()
-
+    
