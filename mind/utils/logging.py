@@ -1,93 +1,68 @@
-"""Logging utility functions."""
-import logging
+"""
+Logging configuration for the project.
+"""
 import os
+import logging
+from pathlib import Path
 import sys
-from typing import Optional
-import datetime
+from typing import Optional, Union
 
 
-def get_logger(name: str) -> logging.Logger:
+def setup_logging(log_level: str = 'INFO',
+                  log_file: Optional[Union[str, Path]] = None,
+                  console: bool = True) -> logging.Logger:
     """
-    Get logger with default configuration.
+    Set up logging configuration.
 
     Parameters
     ----------
-    name : str
-        Logger name
+    log_level : str, optional
+        Logging level ('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'), by default 'INFO'
+    log_file : Optional[Union[str, Path]], optional
+        Path to log file, by default None (no file logging)
+    console : bool, optional
+        Whether to log to console, by default True
 
     Returns
     -------
     logging.Logger
-        Configured logger
+        Logger object
     """
-    return logging.getLogger(name)
+    # Convert log level string to logging level
+    level = getattr(logging, log_level.upper())
 
-
-def setup_logging(
-        log_file: Optional[str] = None,
-        log_level: int = logging.INFO,
-        log_format: str = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-) -> None:
-    """
-    Set up logging configuration with auto-timestamped log file.
-
-    Parameters
-    ----------
-    log_file : Optional[str], optional
-        Path to log file, by default None (log to console only)
-    log_level : int, optional
-        Logging level, by default logging.INFO
-    log_format : str, optional
-        Log format string, by default '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    """
-    # Add timestamp to log_file if provided
-    if log_file:
-        log_dir = os.path.dirname(log_file)
-        log_name = os.path.basename(log_file)
-
-        # Split log name and extension
-        log_name_parts = os.path.splitext(log_name)
-
-        # Add timestamp
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        log_name = f"{log_name_parts[0]}_{timestamp}{log_name_parts[1]}"
-
-        # Create final log file path
-        log_file = os.path.join(log_dir, log_name)
-
-        # Create directory if it doesn't exist
-        os.makedirs(log_dir, exist_ok=True)
-
-    # Configure logging
-    handlers = []
-
-    # Console handler
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setFormatter(logging.Formatter(log_format))
-    handlers.append(console_handler)
-
-    # File handler if log_file is provided
-    if log_file:
-        file_handler = logging.FileHandler(log_file)
-        file_handler.setFormatter(logging.Formatter(log_format))
-        handlers.append(file_handler)
-
-    # Configure root logger
-    logging.basicConfig(
-        level=log_level,
-        handlers=handlers,
-        format=log_format
+    # Create formatter
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
     )
 
-    # Suppress excessive logging from libraries
-    logging.getLogger('matplotlib').setLevel(logging.WARNING)
-    logging.getLogger('PIL').setLevel(logging.WARNING)
-    logging.getLogger('torch').setLevel(logging.WARNING)
-    logging.getLogger('wandb').setLevel(logging.WARNING)
+    # Create logger
+    logger = logging.getLogger()
+    logger.setLevel(level)
 
-    # Log configuration setup
-    logger = logging.getLogger(__name__)
-    logger.info(f"Logging configured with level {logging.getLevelName(log_level)}")
-    if log_file:
-        logger.info(f"Logging to file: {log_file}")
+    # Remove existing handlers
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+
+    # Add console handler if requested
+    if console:
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(level)
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
+
+    # Add file handler if log file is provided
+    if log_file is not None:
+        # Create directory if it doesn't exist
+        log_path = Path(log_file)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setLevel(level)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+
+    return logger
+
 

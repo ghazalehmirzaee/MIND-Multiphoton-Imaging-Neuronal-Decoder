@@ -1,5 +1,0 @@
-# mind/config/signal_types/deconv.yaml
-# Configuration for using only deconvolved signal
-data:
-  signal_types: ["deconv"]
-

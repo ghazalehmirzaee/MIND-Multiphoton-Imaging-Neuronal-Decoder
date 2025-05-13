@@ -1,5 +1,0 @@
-# mind/config/signal_types/all.yaml
-# Configuration for using all signal types
-data:
-  signal_types: ["calcium", "deltaf", "deconv"]
-

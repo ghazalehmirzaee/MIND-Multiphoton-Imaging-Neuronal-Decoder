@@ -1,5 +1,0 @@
-# mind/config/signal_types/calcium.yaml
-# Configuration for using only calcium signal
-data:
-  signal_types: ["calcium"]
-

@@ -1,520 +1,874 @@
+# # mind/visualization/performance.py
+# """
+# Performance visualization module with consistent styling.
+# Creates confusion matrices, ROC curves, and performance comparisons.
+# """
+# import numpy as np
+# import matplotlib.pyplot as plt
+# import seaborn as sns
+# from pathlib import Path
+# from typing import Dict, Optional, Any
+# from sklearn.metrics import auc
+# import logging
+#
+# from .config import (SIGNAL_COLORS, SIGNAL_DISPLAY_NAMES, MODEL_DISPLAY_NAMES,
+#                      set_publication_style, get_signal_colormap, FIGURE_SIZES)
+#
+# logger = logging.getLogger(__name__)
+#
+#
+# def plot_confusion_matrix_grid(
+#         results: Dict[str, Dict[str, Any]],
+#         output_dir: Optional[Path] = None
+# ) -> plt.Figure:
+#     """
+#     Create a 5x3 grid of confusion matrices for all models and signal types.
+#
+#     This function creates a grid showing confusion matrices for each model-signal
+#     combination, with consistent color coding by signal type.
+#
+#     Parameters
+#     ----------
+#     results : Dict[str, Dict[str, Any]]
+#         Results dictionary organized by model and signal type
+#     output_dir : Optional[Path]
+#         Directory to save the figure
+#
+#     Returns
+#     -------
+#     plt.Figure
+#         The created figure
+#     """
+#     set_publication_style()
+#
+#     models = ['random_forest', 'svm', 'mlp', 'fcnn', 'cnn']
+#     signals = ['calcium_signal', 'deltaf_signal', 'deconv_signal']
+#
+#     fig, axes = plt.subplots(5, 3, figsize=FIGURE_SIZES['grid_5x3'],
+#                              gridspec_kw={'hspace': 0.4, 'wspace': 0.3})
+#
+#     for i, model in enumerate(models):
+#         for j, signal in enumerate(signals):
+#             ax = axes[i, j]
+#
+#             # Get confusion matrix and metrics
+#             try:
+#                 cm = np.array(results[model][signal]['confusion_matrix'])
+#                 metrics = results[model][signal]['metrics']
+#
+#                 # Calculate percentages row-wise (for imbalanced data)
+#                 cm_percent = cm.astype(float) / cm.sum(axis=1)[:, np.newaxis] * 100
+#
+#                 # Create custom colormap based on signal color
+#                 cmap = get_signal_colormap(signal)
+#
+#                 # Plot confusion matrix
+#                 sns.heatmap(cm_percent, annot=True, fmt='.1f', cmap=cmap,
+#                             cbar=False, ax=ax,
+#                             xticklabels=['No footstep', 'Contralateral'],
+#                             yticklabels=['No footstep', 'Contralateral'])
+#
+#                 # Add title with metrics
+#                 accuracy = metrics.get('accuracy', 0)
+#                 f1_score = metrics.get('f1_score', 0)
+#                 ax.set_title(f'{MODEL_DISPLAY_NAMES[model]} - {SIGNAL_DISPLAY_NAMES[signal]}\n'
+#                              f'Acc: {accuracy:.3f}, F1: {f1_score:.3f}',
+#                              fontsize=11)
+#
+#                 # Add colored border to match signal type
+#                 color = SIGNAL_COLORS[signal]
+#                 for spine in ax.spines.values():
+#                     spine.set_edgecolor(color)
+#                     spine.set_linewidth(2)
+#
+#             except (KeyError, TypeError, ValueError) as e:
+#                 ax.text(0.5, 0.5, 'No data available',
+#                         ha='center', va='center', transform=ax.transAxes)
+#                 ax.set_xticks([])
+#                 ax.set_yticks([])
+#
+#     fig.suptitle('Binary Classification Confusion Matrices',
+#                  fontsize=16, fontweight='bold')
+#
+#     if output_dir:
+#         output_path = Path(output_dir) / 'confusion_matrix_grid.png'
+#         fig.savefig(output_path, dpi=300, bbox_inches='tight')
+#         logger.info(f"Saved confusion matrix grid to {output_path}")
+#
+#     return fig
+#
+#
+# def plot_roc_curve_grid(
+#         results: Dict[str, Dict[str, Any]],
+#         output_dir: Optional[Path] = None
+# ) -> plt.Figure:
+#     """
+#     Create a 5x3 grid of ROC curves for all models and signal types.
+#
+#     Each ROC curve is colored according to its signal type for consistency.
+#
+#     Parameters
+#     ----------
+#     results : Dict[str, Dict[str, Any]]
+#         Results dictionary organized by model and signal type
+#     output_dir : Optional[Path]
+#         Directory to save the figure
+#
+#     Returns
+#     -------
+#     plt.Figure
+#         The created figure
+#     """
+#     set_publication_style()
+#
+#     models = ['random_forest', 'svm', 'mlp', 'fcnn', 'cnn']
+#     signals = ['calcium_signal', 'deltaf_signal', 'deconv_signal']
+#
+#     fig, axes = plt.subplots(5, 3, figsize=FIGURE_SIZES['grid_5x3'],
+#                              gridspec_kw={'hspace': 0.4, 'wspace': 0.3})
+#
+#     for i, model in enumerate(models):
+#         for j, signal in enumerate(signals):
+#             ax = axes[i, j]
+#             signal_color = SIGNAL_COLORS[signal]
+#
+#             try:
+#                 curve_data = results[model][signal].get('curve_data', {})
+#                 if 'roc' in curve_data:
+#                     fpr = np.array(curve_data['roc']['fpr'])
+#                     tpr = np.array(curve_data['roc']['tpr'])
+#
+#                     # Plot ROC curve with signal color
+#                     ax.plot(fpr, tpr, color=signal_color, linewidth=2.5)
+#                     ax.plot([0, 1], [0, 1], 'k--', alpha=0.5, linewidth=1)
+#
+#                     # Calculate and display AUC
+#                     auc_score = auc(fpr, tpr)
+#                     ax.set_title(f'{MODEL_DISPLAY_NAMES[model]} - {SIGNAL_DISPLAY_NAMES[signal]}\n'
+#                                  f'AUC: {auc_score:.3f}', fontsize=11)
+#
+#                     # Fill area under curve
+#                     ax.fill_between(fpr, tpr, alpha=0.2, color=signal_color)
+#                 else:
+#                     ax.text(0.5, 0.5, 'No ROC data',
+#                             ha='center', va='center', transform=ax.transAxes)
+#
+#                 ax.set_xlabel('False Positive Rate')
+#                 ax.set_ylabel('True Positive Rate')
+#                 ax.grid(True, alpha=0.3)
+#                 ax.set_xlim([0, 1])
+#                 ax.set_ylim([0, 1])
+#
+#                 # Add colored border
+#                 for spine in ax.spines.values():
+#                     spine.set_edgecolor(signal_color)
+#                     spine.set_linewidth(1.5)
+#
+#             except (KeyError, TypeError) as e:
+#                 ax.text(0.5, 0.5, 'No data available',
+#                         ha='center', va='center', transform=ax.transAxes)
+#                 ax.set_xticks([])
+#                 ax.set_yticks([])
+#
+#     fig.suptitle('ROC Curves - Binary Classification',
+#                  fontsize=16, fontweight='bold')
+#
+#     if output_dir:
+#         output_path = Path(output_dir) / 'roc_curve_grid.png'
+#         fig.savefig(output_path, dpi=300, bbox_inches='tight')
+#         logger.info(f"Saved ROC curve grid to {output_path}")
+#
+#     return fig
+#
+#
+# def plot_precision_recall_grid(
+#         results: Dict[str, Dict[str, Any]],
+#         output_dir: Optional[Path] = None
+# ) -> plt.Figure:
+#     """
+#     Create a 5x3 grid of precision-recall curves for all models and signal types.
+#
+#     Each curve is colored according to its signal type for consistency.
+#
+#     Parameters
+#     ----------
+#     results : Dict[str, Dict[str, Any]]
+#         Results dictionary organized by model and signal type
+#     output_dir : Optional[Path]
+#         Directory to save the figure
+#
+#     Returns
+#     -------
+#     plt.Figure
+#         The created figure
+#     """
+#     set_publication_style()
+#
+#     models = ['random_forest', 'svm', 'mlp', 'fcnn', 'cnn']
+#     signals = ['calcium_signal', 'deltaf_signal', 'deconv_signal']
+#
+#     fig, axes = plt.subplots(5, 3, figsize=FIGURE_SIZES['grid_5x3'],
+#                              gridspec_kw={'hspace': 0.4, 'wspace': 0.3})
+#
+#     for i, model in enumerate(models):
+#         for j, signal in enumerate(signals):
+#             ax = axes[i, j]
+#             signal_color = SIGNAL_COLORS[signal]
+#
+#             try:
+#                 curve_data = results[model][signal].get('curve_data', {})
+#                 if 'precision_recall' in curve_data:
+#                     precision = np.array(curve_data['precision_recall']['precision'])
+#                     recall = np.array(curve_data['precision_recall']['recall'])
+#
+#                     # Plot precision-recall curve with signal color
+#                     ax.plot(recall, precision, color=signal_color, linewidth=2.5)
+#
+#                     # Calculate and display AUC
+#                     pr_auc = auc(recall, precision)
+#                     ax.set_title(f'{MODEL_DISPLAY_NAMES[model]} - {SIGNAL_DISPLAY_NAMES[signal]}\n'
+#                                  f'AUC: {pr_auc:.3f}', fontsize=11)
+#
+#                     # Fill area under curve
+#                     ax.fill_between(recall, precision, alpha=0.2, color=signal_color)
+#
+#                     # Add baseline (for imbalanced dataset)
+#                     baseline = 0.2814  # Percentage of positive class
+#                     ax.axhline(y=baseline, color='gray', linestyle='--',
+#                                alpha=0.7, label=f'Baseline: {baseline:.3f}')
+#                 else:
+#                     ax.text(0.5, 0.5, 'No PR data',
+#                             ha='center', va='center', transform=ax.transAxes)
+#
+#                 ax.set_xlabel('Recall')
+#                 ax.set_ylabel('Precision')
+#                 ax.grid(True, alpha=0.3)
+#                 ax.set_xlim([0, 1])
+#                 ax.set_ylim([0, 1])
+#
+#                 # Add colored border
+#                 for spine in ax.spines.values():
+#                     spine.set_edgecolor(signal_color)
+#                     spine.set_linewidth(1.5)
+#
+#             except (KeyError, TypeError) as e:
+#                 ax.text(0.5, 0.5, 'No data available',
+#                         ha='center', va='center', transform=ax.transAxes)
+#                 ax.set_xticks([])
+#                 ax.set_yticks([])
+#
+#     fig.suptitle('Precision-Recall Curves - Binary Classification',
+#                  fontsize=16, fontweight='bold')
+#
+#     if output_dir:
+#         output_path = Path(output_dir) / 'precision_recall_grid.png'
+#         fig.savefig(output_path, dpi=300, bbox_inches='tight')
+#         logger.info(f"Saved precision-recall curve grid to {output_path}")
+#
+#     return fig
+#
+#
+# def plot_performance_radar(
+#         results: Dict[str, Dict[str, Any]],
+#         output_dir: Optional[Path] = None
+# ) -> plt.Figure:
+#     """
+#     Create radar plots showing performance metrics for each signal type.
+#
+#     Shows accuracy, precision, recall, and F1 score for all models on each
+#     signal type using radar charts.
+#
+#     Parameters
+#     ----------
+#     results : Dict[str, Dict[str, Any]]
+#         Results dictionary organized by model and signal type
+#     output_dir : Optional[Path]
+#         Directory to save the figure
+#
+#     Returns
+#     -------
+#     plt.Figure
+#         The created figure
+#     """
+#     set_publication_style()
+#
+#     models = ['random_forest', 'svm', 'mlp', 'fcnn', 'cnn']
+#     signals = ['calcium_signal', 'deltaf_signal', 'deconv_signal']
+#     metrics = ['accuracy', 'precision', 'recall', 'f1_score']
+#     metric_names = ['Accuracy', 'Precision', 'Recall', 'F1']
+#
+#     # Professional colors for models
+#     model_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
+#
+#     fig, axes = plt.subplots(1, 3, figsize=FIGURE_SIZES['grid_1x3'],
+#                              subplot_kw=dict(projection='polar'))
+#
+#     for j, signal in enumerate(signals):
+#         ax = axes[j]
+#
+#         # Number of metrics
+#         num_vars = len(metrics)
+#         angles = np.linspace(0, 2 * np.pi, num_vars, endpoint=False).tolist()
+#         angles += angles[:1]
+#
+#         # Plot for each model
+#         for idx, model in enumerate(models):
+#             try:
+#                 values = []
+#                 for metric in metrics:
+#                     value = results[model][signal]['metrics'][metric]
+#                     values.append(value)
+#                 values += values[:1]
+#
+#                 # Plot with model color
+#                 ax.plot(angles, values, 'o-', linewidth=2,
+#                         label=MODEL_DISPLAY_NAMES[model], color=model_colors[idx])
+#                 ax.fill(angles, values, alpha=0.15, color=model_colors[idx])
+#
+#             except KeyError:
+#                 continue
+#
+#         ax.set_xticks(angles[:-1])
+#         ax.set_xticklabels(metric_names, size=12)
+#         ax.set_ylim(0, 1)
+#
+#         # Set title with signal color
+#         title_color = SIGNAL_COLORS[signal]
+#         ax.set_title(f'{SIGNAL_DISPLAY_NAMES[signal]}',
+#                      size=18, weight='bold', pad=20, color=title_color)
+#         ax.grid(True, alpha=0.3)
+#
+#         # Style
+#         ax.set_theta_offset(np.pi / 2)
+#         ax.set_theta_direction(-1)
+#
+#         # Reference circle
+#         ax.plot(angles, [0.5] * len(angles), 'k--', linewidth=0.8, alpha=0.3)
+#
+#         if j == 2:
+#             ax.legend(loc='upper right', bbox_to_anchor=(1.3, 1.0))
+#
+#     fig.suptitle('Performance Radar Plots by Signal Type',
+#                  fontsize=20, fontweight='bold')
+#
+#     if output_dir:
+#         output_path = Path(output_dir) / 'performance_radar.png'
+#         fig.savefig(output_path, dpi=300, bbox_inches='tight')
+#         logger.info(f"Saved performance radar to {output_path}")
+#
+#     return fig
+#
+#
+# def plot_model_performance_heatmap(
+#         results: Dict[str, Dict[str, Any]],
+#         output_dir: Optional[Path] = None
+# ) -> plt.Figure:
+#     """
+#     Create a heatmap showing F1 scores for all model-signal combinations.
+#
+#     This creates a visual summary of model performance across all signal types.
+#
+#     Parameters
+#     ----------
+#     results : Dict[str, Dict[str, Any]]
+#         Results dictionary organized by model and signal type
+#     output_dir : Optional[Path]
+#         Directory to save the figure
+#
+#     Returns
+#     -------
+#     plt.Figure
+#         The created figure
+#     """
+#     set_publication_style()
+#
+#     models = ['random_forest', 'svm', 'mlp', 'fcnn', 'cnn']
+#     signals = ['calcium_signal', 'deltaf_signal', 'deconv_signal']
+#
+#     # Create F1 score matrix
+#     f1_matrix = np.zeros((len(models), len(signals)))
+#
+#     for i, model in enumerate(models):
+#         for j, signal in enumerate(signals):
+#             try:
+#                 f1_score = results[model][signal]['metrics']['f1_score']
+#                 f1_matrix[i, j] = f1_score
+#             except KeyError:
+#                 f1_matrix[i, j] = np.nan
+#
+#     fig, ax = plt.subplots(figsize=FIGURE_SIZES['medium'])
+#
+#     # Create heatmap with scientific colormap
+#     im = sns.heatmap(f1_matrix, annot=True, fmt='.3f', cmap='viridis',
+#                      xticklabels=[SIGNAL_DISPLAY_NAMES[s] for s in signals],
+#                      yticklabels=[MODEL_DISPLAY_NAMES[m] for m in models],
+#                      cbar_kws={'label': 'F1 Score'}, ax=ax)
+#
+#     ax.set_title('Model Performance Heatmap (F1 Scores)',
+#                  fontsize=14, fontweight='bold')
+#
+#     # Color the x-axis labels according to signal type
+#     for ticklabel, signal in zip(ax.get_xticklabels(), signals):
+#         ticklabel.set_color(SIGNAL_COLORS[signal])
+#         ticklabel.set_weight('bold')
+#
+#     if output_dir:
+#         output_path = Path(output_dir) / 'model_performance_heatmap.png'
+#         fig.savefig(output_path, dpi=300, bbox_inches='tight')
+#         logger.info(f"Saved model performance heatmap to {output_path}")
+#
+#     return fig
+#
+
 # mind/visualization/performance.py
+"""
+Performance visualization module with consistent styling.
+Creates confusion matrices, ROC curves, and performance comparisons.
+"""
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from typing import Dict, List, Optional, Tuple, Any
-from sklearn.metrics import confusion_matrix, roc_curve, auc, precision_recall_curve, average_precision_score
-import os
+from pathlib import Path
+from typing import Dict, Optional, Any
+from sklearn.metrics import auc
+import logging
+
+from .config import (SIGNAL_COLORS, SIGNAL_DISPLAY_NAMES, MODEL_DISPLAY_NAMES,
+                     set_publication_style, get_signal_colormap, FIGURE_SIZES)
+
+logger = logging.getLogger(__name__)
 
 
-def plot_confusion_matrix(y_true: np.ndarray,
-                          y_pred: np.ndarray,
-                          classes: List[str],
-                          title: str = 'Confusion Matrix',
-                          normalize: bool = True,
-                          output_dir: Optional[str] = None,
-                          save_filename: Optional[str] = None,
-                          figsize: Tuple[int, int] = (8, 6)) -> plt.Figure:
+def plot_confusion_matrix_grid(
+        results: Dict[str, Dict[str, Any]],
+        output_dir: Optional[Path] = None
+) -> plt.Figure:
     """
-    Plot confusion matrix.
+    Create a 5x3 grid of confusion matrices for all models and signal types.
+
+    This function creates a grid showing confusion matrices for each model-signal
+    combination, with consistent color coding by signal type.
 
     Parameters
     ----------
-    y_true : np.ndarray
-        True labels
-    y_pred : np.ndarray
-        Predicted labels
-    classes : List[str]
-        List of class names
-    title : str, optional
-        Title of the plot
-    normalize : bool, optional
-        Whether to normalize the confusion matrix
-    output_dir : str, optional
-        Directory to save the plot
-    save_filename : str, optional
-        Filename to save the plot
-    figsize : Tuple[int, int], optional
-        Figure size
+    results : Dict[str, Dict[str, Any]]
+        Results dictionary organized by model and signal type
+    output_dir : Optional[Path]
+        Directory to save the figure
 
     Returns
     -------
     plt.Figure
-        Matplotlib figure object
+        The created figure
     """
-    # Compute confusion matrix
-    cm = confusion_matrix(y_true, y_pred)
+    set_publication_style()
 
-    # Normalize if required
-    if normalize:
-        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis] * 100
-        fmt = '.1f'
-        vmax = 100
-    else:
-        fmt = 'd'
-        vmax = np.max(cm)
+    models = ['random_forest', 'svm', 'mlp', 'fcnn', 'cnn']
+    signals = ['calcium_signal', 'deltaf_signal', 'deconv_signal']
 
-    # Create figure
-    fig, ax = plt.subplots(figsize=figsize)
+    fig, axes = plt.subplots(5, 3, figsize=FIGURE_SIZES['grid_5x3'],
+                             gridspec_kw={'hspace': 0.4, 'wspace': 0.3})
 
-    # Plot heatmap
-    im = ax.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues, vmax=vmax)
-    plt.colorbar(im, ax=ax)
-
-    # Set labels
-    ax.set(xticks=np.arange(cm.shape[1]),
-           yticks=np.arange(cm.shape[0]),
-           xticklabels=classes, yticklabels=classes,
-           title=title,
-           ylabel='True label',
-           xlabel='Predicted label')
-
-    # Rotate x tick labels
-    plt.setp(ax.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")
-
-    # Loop over data dimensions and create text annotations
-    thresh = cm.max() / 2.
-    for i in range(cm.shape[0]):
-        for j in range(cm.shape[1]):
-            ax.text(j, i, format(cm[i, j], fmt),
-                    ha="center", va="center",
-                    color="white" if cm[i, j] > thresh else "black")
-
-    # Adjust layout
-    fig.tight_layout()
-
-    # Save figure if output directory and filename are provided
-    if output_dir is not None and save_filename is not None:
-        os.makedirs(output_dir, exist_ok=True)
-        save_path = os.path.join(output_dir, save_filename)
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Figure saved to {save_path}")
-
-    return fig
-
-
-def plot_model_performance_comparison(results: Dict[str, Dict[str, Dict[str, float]]],
-                                      metric: str = 'accuracy',
-                                      title: str = 'Model Performance Comparison',
-                                      output_dir: Optional[str] = None,
-                                      save_filename: Optional[str] = None,
-                                      figsize: Tuple[int, int] = (12, 8)) -> plt.Figure:
-    """
-    Plot comparison of model performance across different signal types.
-
-    Parameters
-    ----------
-    results : Dict[str, Dict[str, Dict[str, float]]]
-        Nested dictionary with structure {signal_type: {model_name: {metric: value}}}
-    metric : str, optional
-        Performance metric to plot
-    title : str, optional
-        Title of the plot
-    output_dir : str, optional
-        Directory to save the plot
-    save_filename : str, optional
-        Filename to save the plot
-    figsize : Tuple[int, int], optional
-        Figure size
-
-    Returns
-    -------
-    plt.Figure
-        Matplotlib figure object
-    """
-    # Extract signal types and model names
-    signal_types = list(results.keys())
-    model_names = list(results[signal_types[0]].keys())
-
-    # Create a DataFrame to hold the results
-    import pandas as pd
-    data = []
-    for signal_type in signal_types:
-        for model_name in model_names:
-            value = results[signal_type][model_name][metric]
-            data.append({
-                'Signal Type': signal_type,
-                'Model': model_name,
-                f'{metric.capitalize()}': value
-            })
-    df = pd.DataFrame(data)
-
-    # Create figure
-    fig, ax = plt.subplots(figsize=figsize)
-
-    # Plot grouped bar chart
-    sns.barplot(x='Model', y=f'{metric.capitalize()}', hue='Signal Type', data=df, ax=ax)
-
-    # Set labels and title
-    ax.set_title(title, fontsize=16)
-    ax.set_xlabel('Model', fontsize=14)
-    ax.set_ylabel(f'{metric.capitalize()}', fontsize=14)
-
-    # Adjust legend
-    ax.legend(title='Signal Type', fontsize=12)
-
-    # Adjust layout
-    fig.tight_layout()
-
-    # Save figure if output directory and filename are provided
-    if output_dir is not None and save_filename is not None:
-        os.makedirs(output_dir, exist_ok=True)
-        save_path = os.path.join(output_dir, save_filename)
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Figure saved to {save_path}")
-
-    return fig
-
-
-def plot_roc_curves(y_true: np.ndarray,
-                    y_pred_probas: Dict[str, np.ndarray],
-                    title: str = 'ROC Curves',
-                    output_dir: Optional[str] = None,
-                    save_filename: Optional[str] = None,
-                    figsize: Tuple[int, int] = (10, 8)) -> plt.Figure:
-    """
-    Plot ROC curves for multiple models.
-
-    Parameters
-    ----------
-    y_true : np.ndarray
-        True labels
-    y_pred_probas : Dict[str, np.ndarray]
-        Dictionary mapping model names to their prediction probabilities
-    title : str, optional
-        Title of the plot
-    output_dir : str, optional
-        Directory to save the plot
-    save_filename : str, optional
-        Filename to save the plot
-    figsize : Tuple[int, int], optional
-        Figure size
-
-    Returns
-    -------
-    plt.Figure
-        Matplotlib figure object
-    """
-    # Create figure
-    fig, ax = plt.subplots(figsize=figsize)
-
-    # Plot ROC curve for each model
-    for model_name, y_pred_proba in y_pred_probas.items():
-        # For binary classification, we need the probability of the positive class
-        if y_pred_proba.shape[1] == 2:
-            y_score = y_pred_proba[:, 1]
-        else:
-            # For multi-class, we can use one-vs-rest approach
-            y_score = y_pred_proba
-
-        # Compute ROC curve and area
-        fpr, tpr, _ = roc_curve(y_true, y_score)
-        roc_auc = auc(fpr, tpr)
-
-        # Plot ROC curve
-        ax.plot(fpr, tpr, lw=2, label=f'{model_name} (AUC = {roc_auc:.3f})')
-
-    # Plot diagonal line
-    ax.plot([0, 1], [0, 1], 'k--', lw=2)
-
-    # Set labels and title
-    ax.set_xlim([0.0, 1.0])
-    ax.set_ylim([0.0, 1.05])
-    ax.set_xlabel('False Positive Rate', fontsize=14)
-    ax.set_ylabel('True Positive Rate', fontsize=14)
-    ax.set_title(title, fontsize=16)
-
-    # Add legend
-    ax.legend(loc='lower right', fontsize=12)
-
-    # Adjust layout
-    fig.tight_layout()
-
-    # Save figure if output directory and filename are provided
-    if output_dir is not None and save_filename is not None:
-        os.makedirs(output_dir, exist_ok=True)
-        save_path = os.path.join(output_dir, save_filename)
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Figure saved to {save_path}")
-
-    return fig
-
-
-def plot_precision_recall_curves(y_true: np.ndarray,
-                                 y_pred_probas: Dict[str, np.ndarray],
-                                 title: str = 'Precision-Recall Curves',
-                                 output_dir: Optional[str] = None,
-                                 save_filename: Optional[str] = None,
-                                 figsize: Tuple[int, int] = (10, 8)) -> plt.Figure:
-    """
-    Plot precision-recall curves for multiple models.
-
-    Parameters
-    ----------
-    y_true : np.ndarray
-        True labels
-    y_pred_probas : Dict[str, np.ndarray]
-        Dictionary mapping model names to their prediction probabilities
-    title : str, optional
-        Title of the plot
-    output_dir : str, optional
-        Directory to save the plot
-    save_filename : str, optional
-        Filename to save the plot
-    figsize : Tuple[int, int], optional
-        Figure size
-
-    Returns
-    -------
-    plt.Figure
-        Matplotlib figure object
-    """
-    # Create figure
-    fig, ax = plt.subplots(figsize=figsize)
-
-    # Plot precision-recall curve for each model
-    for model_name, y_pred_proba in y_pred_probas.items():
-        # For binary classification, we need the probability of the positive class
-        if y_pred_proba.shape[1] == 2:
-            y_score = y_pred_proba[:, 1]
-        else:
-            # For multi-class, we can use one-vs-rest approach
-            y_score = y_pred_proba
-
-        # Compute precision-recall curve and average precision
-        precision, recall, _ = precision_recall_curve(y_true, y_score)
-        ap = average_precision_score(y_true, y_score)
-
-        # Plot precision-recall curve
-        ax.plot(recall, precision, lw=2, label=f'{model_name} (AP = {ap:.3f})')
-
-    # Set labels and title
-    ax.set_xlim([0.0, 1.0])
-    ax.set_ylim([0.0, 1.05])
-    ax.set_xlabel('Recall', fontsize=14)
-    ax.set_ylabel('Precision', fontsize=14)
-    ax.set_title(title, fontsize=16)
-
-    # Add legend
-    ax.legend(loc='best', fontsize=12)
-
-    # Adjust layout
-    fig.tight_layout()
-
-    # Save figure if output directory and filename are provided
-    if output_dir is not None and save_filename is not None:
-        os.makedirs(output_dir, exist_ok=True)
-        save_path = os.path.join(output_dir, save_filename)
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Figure saved to {save_path}")
-
-    return fig
-
-
-def plot_all_confusion_matrices(results: Dict[str, Dict[str, Dict[str, Any]]],
-                                classes: List[str],
-                                title_prefix: str = 'Confusion Matrix',
-                                output_dir: Optional[str] = None,
-                                save_filename_prefix: Optional[str] = 'confusion_matrix',
-                                figsize: Tuple[int, int] = (20, 15)) -> Dict[str, Dict[str, plt.Figure]]:
-    """
-    Plot confusion matrices for all models and signal types.
-
-    Parameters
-    ----------
-    results : Dict[str, Dict[str, Dict[str, Any]]]
-        Nested dictionary with structure {signal_type: {model_name: {metric: value}}}
-    classes : List[str]
-        List of class names
-    title_prefix : str, optional
-        Prefix for the plot titles
-    output_dir : str, optional
-        Directory to save the plots
-    save_filename_prefix : str, optional
-        Prefix for the saved filenames
-    figsize : Tuple[int, int], optional
-        Figure size
-
-    Returns
-    -------
-    Dict[str, Dict[str, plt.Figure]]
-        Nested dictionary with structure {signal_type: {model_name: figure}}
-    """
-    # Extract signal types and model names
-    signal_types = list(results.keys())
-    model_names = list(results[signal_types[0]].keys())
-
-    # Create a figure with subplots for all models and signal types
-    fig, axes = plt.subplots(len(model_names), len(signal_types), figsize=figsize)
-
-    # Make sure axes is a 2D array
-    if len(model_names) == 1 and len(signal_types) == 1:
-        axes = np.array([[axes]])
-    elif len(model_names) == 1:
-        axes = np.array([axes])
-    elif len(signal_types) == 1:
-        axes = np.array([[ax] for ax in axes])
-
-    # Plot confusion matrices
-    for i, model_name in enumerate(model_names):
-        for j, signal_type in enumerate(signal_types):
-            # Get true and predicted labels
-            y_true = results[signal_type][model_name]['y_true']
-            y_pred = results[signal_type][model_name]['y_pred']
-
-            # Compute confusion matrix
-            cm = confusion_matrix(y_true, y_pred)
-
-            # Normalize
-            cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis] * 100
-
-            # Plot heatmap
+    for i, model in enumerate(models):
+        for j, signal in enumerate(signals):
             ax = axes[i, j]
-            im = ax.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues, vmax=100)
 
-            # Set labels
-            ax.set(xticks=np.arange(cm.shape[1]),
-                   yticks=np.arange(cm.shape[0]),
-                   xticklabels=classes, yticklabels=classes)
+            # Get confusion matrix and metrics
+            try:
+                cm = np.array(results[model][signal]['confusion_matrix'])
+                metrics = results[model][signal]['metrics']
 
-            # Set title
-            ax.set_title(f'{model_name} - {signal_type}', fontsize=12)
+                # Calculate percentages row-wise (for imbalanced data)
+                cm_percent = cm.astype(float) / cm.sum(axis=1)[:, np.newaxis] * 100
 
-            # Only set labels for the bottom and left subplots
-            if i == len(model_names) - 1:
-                ax.set_xlabel('Predicted label', fontsize=10)
-            if j == 0:
-                ax.set_ylabel('True label', fontsize=10)
+                # Create custom colormap based on signal color
+                cmap = get_signal_colormap(signal)
 
-            # Rotate x tick labels
-            plt.setp(ax.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")
+                # Plot confusion matrix
+                sns.heatmap(cm_percent, annot=True, fmt='.1f', cmap=cmap,
+                            cbar=False, ax=ax,
+                            xticklabels=['No footstep', 'Contralateral'],
+                            yticklabels=['No footstep', 'Contralateral'])
 
-            # Loop over data dimensions and create text annotations
-            thresh = cm.max() / 2.
-            for i_cm in range(cm.shape[0]):
-                for j_cm in range(cm.shape[1]):
-                    ax.text(j_cm, i_cm, f'{cm[i_cm, j_cm]:.1f}%',
-                            ha="center", va="center",
-                            color="white" if cm[i_cm, j_cm] > thresh else "black",
-                            fontsize=10)
+                # Add title with metrics
+                accuracy = metrics.get('accuracy', 0)
+                f1_score = metrics.get('f1_score', 0)
+                ax.set_title(f'{MODEL_DISPLAY_NAMES[model]} - {SIGNAL_DISPLAY_NAMES[signal]}\n'
+                             f'Acc: {accuracy:.3f}, F1: {f1_score:.3f}',
+                             fontsize=11)
 
-    # Add colorbar
-    fig.colorbar(im, ax=axes.ravel().tolist())
+                # Add colored border to match signal type
+                color = SIGNAL_COLORS[signal]
+                for spine in ax.spines.values():
+                    spine.set_edgecolor(color)
+                    spine.set_linewidth(2)
 
-    # Adjust layout
-    plt.tight_layout()
+            except (KeyError, TypeError, ValueError) as e:
+                ax.text(0.5, 0.5, 'No data available',
+                        ha='center', va='center', transform=ax.transAxes)
+                ax.set_xticks([])
+                ax.set_yticks([])
 
-    # Save figure if output directory and filename are provided
-    if output_dir is not None and save_filename_prefix is not None:
-        os.makedirs(output_dir, exist_ok=True)
-        save_path = os.path.join(output_dir, f'{save_filename_prefix}_all.png')
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Figure saved to {save_path}")
+    fig.suptitle('Binary Classification Confusion Matrices',
+                 fontsize=16, fontweight='bold')
 
-    # Also create individual plots
-    figures = {}
-    for signal_type in signal_types:
-        figures[signal_type] = {}
-        for model_name in model_names:
-            # Get true and predicted labels
-            y_true = results[signal_type][model_name]['y_true']
-            y_pred = results[signal_type][model_name]['y_pred']
+    if output_dir:
+        output_path = Path(output_dir) / 'confusion_matrix_grid.png'
+        fig.savefig(output_path, dpi=300, bbox_inches='tight')
+        logger.info(f"Saved confusion matrix grid to {output_path}")
 
-            # Create individual plot
-            title = f'{title_prefix} - {model_name} - {signal_type}'
-            save_filename = f'{save_filename_prefix}_{model_name}_{signal_type}.png'
-            figures[signal_type][model_name] = plot_confusion_matrix(
-                y_true, y_pred, classes, title=title, normalize=True,
-                output_dir=output_dir, save_filename=save_filename
-            )
-
-    return figures
+    return fig
 
 
-def plot_radar_chart(results: Dict[str, Dict[str, Dict[str, float]]],
-                     metrics: List[str] = ['accuracy', 'precision', 'recall', 'f1_score'],
-                     title: str = 'Model Performance Radar Chart',
-                     output_dir: Optional[str] = None,
-                     save_filename: Optional[str] = None,
-                     figsize: Tuple[int, int] = (20, 15)) -> plt.Figure:
+def plot_roc_curve_grid(
+        results: Dict[str, Dict[str, Any]],
+        output_dir: Optional[Path] = None
+) -> plt.Figure:
     """
-    Plot radar chart of model performance across different metrics and signal types.
+    Create a 5x3 grid of ROC curves for all models and signal types.
+
+    Each ROC curve is colored according to its signal type for consistency.
 
     Parameters
     ----------
-    results : Dict[str, Dict[str, Dict[str, float]]]
-        Nested dictionary with structure {signal_type: {model_name: {metric: value}}}
-    metrics : List[str], optional
-        List of metrics to include in the radar chart
-    title : str, optional
-        Title of the plot
-    output_dir : str, optional
-        Directory to save the plot
-    save_filename : str, optional
-        Filename to save the plot
-    figsize : Tuple[int, int], optional
-        Figure size
+    results : Dict[str, Dict[str, Any]]
+        Results dictionary organized by model and signal type
+    output_dir : Optional[Path]
+        Directory to save the figure
 
     Returns
     -------
     plt.Figure
-        Matplotlib figure object
+        The created figure
     """
-    # Extract signal types and model names
-    signal_types = list(results.keys())
-    model_names = list(results[signal_types[0]].keys())
+    set_publication_style()
 
-    # Create a figure with subplots for each signal type
-    fig, axes = plt.subplots(1, len(signal_types), figsize=figsize, subplot_kw=dict(polar=True))
+    models = ['random_forest', 'svm', 'mlp', 'fcnn', 'cnn']
+    signals = ['calcium_signal', 'deltaf_signal', 'deconv_signal']
 
-    # Make sure axes is a list
-    if len(signal_types) == 1:
-        axes = [axes]
+    fig, axes = plt.subplots(5, 3, figsize=FIGURE_SIZES['grid_5x3'],
+                             gridspec_kw={'hspace': 0.4, 'wspace': 0.3})
 
-    # Number of metrics
-    num_metrics = len(metrics)
+    for i, model in enumerate(models):
+        for j, signal in enumerate(signals):
+            ax = axes[i, j]
+            signal_color = SIGNAL_COLORS[signal]
 
-    # Angles for each metric
-    angles = np.linspace(0, 2 * np.pi, num_metrics, endpoint=False).tolist()
-    # Close the polygon
-    angles += angles[:1]
+            try:
+                curve_data = results[model][signal].get('curve_data', {})
+                if 'roc' in curve_data:
+                    fpr = np.array(curve_data['roc']['fpr'])
+                    tpr = np.array(curve_data['roc']['tpr'])
 
-    # Plot radar chart for each signal type
-    for i, (signal_type, ax) in enumerate(zip(signal_types, axes)):
-        # Set title
-        ax.set_title(f'{signal_type}', fontsize=16)
+                    # Plot ROC curve with signal color
+                    ax.plot(fpr, tpr, color=signal_color, linewidth=2.5)
+                    ax.plot([0, 1], [0, 1], 'k--', alpha=0.5, linewidth=1)
 
-        # Set labels
+                    # Calculate and display AUC
+                    auc_score = auc(fpr, tpr)
+                    ax.set_title(f'{MODEL_DISPLAY_NAMES[model]} - {SIGNAL_DISPLAY_NAMES[signal]}\n'
+                                 f'AUC: {auc_score:.3f}', fontsize=11)
+
+                    # Fill area under curve
+                    ax.fill_between(fpr, tpr, alpha=0.2, color=signal_color)
+                else:
+                    ax.text(0.5, 0.5, 'No ROC data',
+                            ha='center', va='center', transform=ax.transAxes)
+
+                ax.set_xlabel('False Positive Rate')
+                ax.set_ylabel('True Positive Rate')
+                ax.grid(True, alpha=0.3)
+                ax.set_xlim([0, 1])
+                ax.set_ylim([0, 1])
+
+                # Add colored border
+                for spine in ax.spines.values():
+                    spine.set_edgecolor(signal_color)
+                    spine.set_linewidth(1.5)
+
+            except (KeyError, TypeError) as e:
+                ax.text(0.5, 0.5, 'No data available',
+                        ha='center', va='center', transform=ax.transAxes)
+                ax.set_xticks([])
+                ax.set_yticks([])
+
+    fig.suptitle('ROC Curves - Binary Classification',
+                 fontsize=16, fontweight='bold')
+
+    if output_dir:
+        output_path = Path(output_dir) / 'roc_curve_grid.png'
+        fig.savefig(output_path, dpi=300, bbox_inches='tight')
+        logger.info(f"Saved ROC curve grid to {output_path}")
+
+    return fig
+
+
+def plot_precision_recall_grid(
+        results: Dict[str, Dict[str, Any]],
+        output_dir: Optional[Path] = None
+) -> plt.Figure:
+    """
+    Create a 5x3 grid of precision-recall curves for all models and signal types.
+
+    Each curve is colored according to its signal type for consistency.
+
+    Parameters
+    ----------
+    results : Dict[str, Dict[str, Any]]
+        Results dictionary organized by model and signal type
+    output_dir : Optional[Path]
+        Directory to save the figure
+
+    Returns
+    -------
+    plt.Figure
+        The created figure
+    """
+    set_publication_style()
+
+    models = ['random_forest', 'svm', 'mlp', 'fcnn', 'cnn']
+    signals = ['calcium_signal', 'deltaf_signal', 'deconv_signal']
+
+    fig, axes = plt.subplots(5, 3, figsize=FIGURE_SIZES['grid_5x3'],
+                             gridspec_kw={'hspace': 0.4, 'wspace': 0.3})
+
+    for i, model in enumerate(models):
+        for j, signal in enumerate(signals):
+            ax = axes[i, j]
+            signal_color = SIGNAL_COLORS[signal]
+
+            try:
+                curve_data = results[model][signal].get('curve_data', {})
+                if 'precision_recall' in curve_data:
+                    precision = np.array(curve_data['precision_recall']['precision'])
+                    recall = np.array(curve_data['precision_recall']['recall'])
+
+                    # Plot precision-recall curve with signal color
+                    ax.plot(recall, precision, color=signal_color, linewidth=2.5)
+
+                    # Calculate and display AUC
+                    pr_auc = auc(recall, precision)
+                    ax.set_title(f'{MODEL_DISPLAY_NAMES[model]} - {SIGNAL_DISPLAY_NAMES[signal]}\n'
+                                 f'AUC: {pr_auc:.3f}', fontsize=11)
+
+                    # Fill area under curve
+                    ax.fill_between(recall, precision, alpha=0.2, color=signal_color)
+
+                    # Add baseline (for imbalanced dataset)
+                    baseline = 0.2814  # Percentage of positive class
+                    ax.axhline(y=baseline, color='gray', linestyle='--',
+                               alpha=0.7, label=f'Baseline: {baseline:.3f}')
+                else:
+                    ax.text(0.5, 0.5, 'No PR data',
+                            ha='center', va='center', transform=ax.transAxes)
+
+                ax.set_xlabel('Recall')
+                ax.set_ylabel('Precision')
+                ax.grid(True, alpha=0.3)
+                ax.set_xlim([0, 1])
+                ax.set_ylim([0, 1])
+
+                # Add colored border
+                for spine in ax.spines.values():
+                    spine.set_edgecolor(signal_color)
+                    spine.set_linewidth(1.5)
+
+            except (KeyError, TypeError) as e:
+                ax.text(0.5, 0.5, 'No data available',
+                        ha='center', va='center', transform=ax.transAxes)
+                ax.set_xticks([])
+                ax.set_yticks([])
+
+    fig.suptitle('Precision-Recall Curves - Binary Classification',
+                 fontsize=16, fontweight='bold')
+
+    if output_dir:
+        output_path = Path(output_dir) / 'precision_recall_grid.png'
+        fig.savefig(output_path, dpi=300, bbox_inches='tight')
+        logger.info(f"Saved precision-recall curve grid to {output_path}")
+
+    return fig
+
+
+def plot_performance_radar(
+        results: Dict[str, Dict[str, Any]],
+        output_dir: Optional[Path] = None
+) -> plt.Figure:
+    """
+    Create radar plots showing performance metrics for each signal type.
+
+    Shows accuracy, precision, recall, and F1 score for all models on each
+    signal type using radar charts.
+
+    Parameters
+    ----------
+    results : Dict[str, Dict[str, Any]]
+        Results dictionary organized by model and signal type
+    output_dir : Optional[Path]
+        Directory to save the figure
+
+    Returns
+    -------
+    plt.Figure
+        The created figure
+    """
+    set_publication_style()
+
+    models = ['random_forest', 'svm', 'mlp', 'fcnn', 'cnn']
+    signals = ['calcium_signal', 'deltaf_signal', 'deconv_signal']
+    metrics = ['accuracy', 'precision', 'recall', 'f1_score']
+    metric_names = ['Accuracy', 'Precision', 'Recall', 'F1']
+
+    # Professional colors for models
+    model_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
+
+    fig, axes = plt.subplots(1, 3, figsize=FIGURE_SIZES['grid_1x3'],
+                             subplot_kw=dict(projection='polar'))
+
+    for j, signal in enumerate(signals):
+        ax = axes[j]
+
+        # Number of metrics
+        num_vars = len(metrics)
+        angles = np.linspace(0, 2 * np.pi, num_vars, endpoint=False).tolist()
+        angles += angles[:1]
+
+        # Plot for each model
+        for idx, model in enumerate(models):
+            try:
+                values = []
+                for metric in metrics:
+                    value = results[model][signal]['metrics'][metric]
+                    values.append(value)
+                values += values[:1]
+
+                # Plot with model color
+                ax.plot(angles, values, 'o-', linewidth=2,
+                        label=MODEL_DISPLAY_NAMES[model], color=model_colors[idx])
+                ax.fill(angles, values, alpha=0.15, color=model_colors[idx])
+
+            except KeyError:
+                continue
+
         ax.set_xticks(angles[:-1])
-        ax.set_xticklabels([metric.capitalize() for metric in metrics], fontsize=12)
-
-        # Set y-ticks
-        ax.set_yticks([0.2, 0.4, 0.6, 0.8, 1.0])
-        ax.set_yticklabels(['0.2', '0.4', '0.6', '0.8', '1.0'], fontsize=10)
+        ax.set_xticklabels(metric_names, size=12)
         ax.set_ylim(0, 1)
 
-        # Plot each model
-        for model_name in model_names:
-            # Extract metric values
-            values = [results[signal_type][model_name][metric] for metric in metrics]
-            # Close the polygon
-            values += values[:1]
+        # Set title with signal color
+        title_color = SIGNAL_COLORS[signal]
+        ax.set_title(f'{SIGNAL_DISPLAY_NAMES[signal]}',
+                     size=18, weight='bold', pad=20, color=title_color)
+        ax.grid(True, alpha=0.3)
 
-            # Plot
-            ax.plot(angles, values, linewidth=2, label=model_name)
-            ax.fill(angles, values, alpha=0.1)
+        # Style
+        ax.set_theta_offset(np.pi / 2)
+        ax.set_theta_direction(-1)
 
-    # Add legend to the right of the figure
-    fig.legend(loc='upper center', bbox_to_anchor=(0.5, 0), ncol=len(model_names), fontsize=12)
+        # Reference circle
+        ax.plot(angles, [0.5] * len(angles), 'k--', linewidth=0.8, alpha=0.3)
 
-    # Adjust layout
+        if j == 2:
+            ax.legend(loc='upper right', bbox_to_anchor=(1.3, 1.0))
+
+    fig.suptitle('Performance Radar Plots by Signal Type',
+                 fontsize=20, fontweight='bold')
+
+    if output_dir:
+        output_path = Path(output_dir) / 'performance_radar.png'
+        fig.savefig(output_path, dpi=300, bbox_inches='tight')
+        logger.info(f"Saved performance radar to {output_path}")
+
+    return fig
+
+
+def plot_model_performance_heatmap(
+        results: Dict[str, Dict[str, Any]],
+        output_dir: Optional[Path] = None
+) -> plt.Figure:
+    """
+    Create a heatmap showing three metrics for all model-signal combinations.
+
+    This creates a visual summary of model performance across all signal types
+    with Accuracy, F1 Score, and ROC AUC grouped together.
+
+    Parameters
+    ----------
+    results : Dict[str, Dict[str, Any]]
+        Results dictionary organized by model and signal type
+    output_dir : Optional[Path]
+        Directory to save the figure
+
+    Returns
+    -------
+    plt.Figure
+        The created figure
+    """
+    set_publication_style()
+
+    models = ['random_forest', 'svm', 'mlp', 'fcnn', 'cnn']
+    signals = ['calcium_signal', 'deltaf_signal', 'deconv_signal']
+    metrics = ['f1_score', 'accuracy', 'roc_auc']
+    metric_names = ['F1 Score', 'Accuracy', 'ROC AUC']
+
+    # Create subplots for three metrics
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+
+    for idx, (metric, metric_name) in enumerate(zip(metrics, metric_names)):
+        ax = axes[idx]
+        matrix = np.zeros((len(models), len(signals)))
+
+        for i, model in enumerate(models):
+            for j, signal in enumerate(signals):
+                try:
+                    if metric == 'roc_auc':
+                        matrix[i, j] = results[model][signal]['metrics'].get('roc_auc', np.nan)
+                    else:
+                        matrix[i, j] = results[model][signal]['metrics'][metric]
+                except KeyError:
+                    matrix[i, j] = np.nan
+
+        # Create heatmap with academic color scheme
+        if metric == 'f1_score':
+            cmap = 'YlOrRd'  # Yellow to Red
+            vmin, vmax = 0.55, 0.92
+        elif metric == 'accuracy':
+            cmap = 'Blues'
+            vmin, vmax = 0.75, 0.925
+        else:  # ROC AUC
+            cmap = 'Greens'
+            vmin, vmax = 0.85, 0.98
+
+        # Plot heatmap
+        im = sns.heatmap(matrix, annot=True, fmt='.3f', cmap=cmap,
+                         xticklabels=[SIGNAL_DISPLAY_NAMES[s] for s in signals],
+                         yticklabels=[MODEL_DISPLAY_NAMES[m] for m in models],
+                         cbar_kws={'label': metric_name}, ax=ax,
+                         vmin=vmin, vmax=vmax,
+                         cbar=True, square=True)
+
+        ax.set_title(f'{metric_name} Heatmap', fontsize=14, fontweight='bold')
+
+        # Color the x-axis labels according to signal type
+        for ticklabel, signal in zip(ax.get_xticklabels(), signals):
+            ticklabel.set_color(SIGNAL_COLORS[signal])
+            ticklabel.set_weight('bold')
+            ticklabel.set_fontsize(11)
+
+        # Style y-axis labels
+        ax.set_yticklabels(ax.get_yticklabels(), fontsize=11)
+
+        # Add box around heatmap
+        for spine in ax.spines.values():
+            spine.set_visible(True)
+            spine.set_linewidth(1.5)
+            spine.set_edgecolor('black')
+
+    fig.suptitle('Model Performance Comparison', fontsize=18, fontweight='bold')
     plt.tight_layout()
 
-    # Save figure if output directory and filename are provided
-    if output_dir is not None and save_filename is not None:
-        os.makedirs(output_dir, exist_ok=True)
-        save_path = os.path.join(output_dir, save_filename)
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Figure saved to {save_path}")
+    if output_dir:
+        output_path = Path(output_dir) / 'model_performance_heatmap.png'
+        fig.savefig(output_path, dpi=300, bbox_inches='tight')
+        logger.info(f"Saved model performance heatmap to {output_path}")
 
     return fig
