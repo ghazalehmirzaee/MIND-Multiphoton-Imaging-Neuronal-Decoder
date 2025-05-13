@@ -2,7 +2,6 @@
 Feature importance analysis for neural decoding models.
 """
 import numpy as np
-import pandas as pd
 from typing import Dict, List, Optional, Tuple, Union, Any
 import logging
 
@@ -51,7 +50,7 @@ def extract_feature_importance(model, window_size: int, n_neurons: int) -> np.nd
         # Handle models with coef_ (like some linear models)
         elif hasattr(model, 'coef_'):
             importance = np.abs(model.coef_).reshape(window_size, n_neurons)
-            importance = importance / importance.sum()
+            importance = importance / importance.sum() if importance.sum() > 0 else importance
 
         else:
             logger.warning("Model does not provide feature importance. Returning zeros.")
@@ -85,8 +84,6 @@ def analyze_temporal_importance(importance_matrix: np.ndarray) -> np.ndarray:
     np.ndarray
         Temporal importance, shape (window_size,)
     """
-    logger.info("Analyzing temporal importance patterns")
-
     # Calculate mean importance across neurons for each time step
     temporal_importance = importance_matrix.mean(axis=1)
 
@@ -113,8 +110,6 @@ def analyze_neuron_importance(importance_matrix: np.ndarray, top_n: int = 20) ->
     Tuple[np.ndarray, np.ndarray]
         (Neuron importance, Indices of top neurons)
     """
-    logger.info(f"Analyzing neuron-specific importance patterns (top {top_n})")
-
     # Calculate mean importance across time steps for each neuron
     neuron_importance = importance_matrix.mean(axis=0)
 
@@ -144,8 +139,6 @@ def find_important_time_windows(importance_matrix: np.ndarray, percentile: float
     List[Tuple[int, int]]
         List of (start, end) time windows
     """
-    logger.info(f"Finding important time windows (percentile {percentile})")
-
     # Calculate temporal importance
     temporal_importance = analyze_temporal_importance(importance_matrix)
 
@@ -170,8 +163,6 @@ def find_important_time_windows(importance_matrix: np.ndarray, percentile: float
     if start is not None:
         segments.append((start, len(above_threshold) - 1))
 
-    logger.info(f"Found {len(segments)} important time windows")
-
     return segments
 
 
@@ -193,8 +184,6 @@ def create_importance_summary(importance_matrix: np.ndarray, window_size: int, n
     Dict[str, Any]
         Dictionary containing importance analysis results
     """
-    logger.info("Creating feature importance summary")
-
     # Analyze temporal importance
     temporal_importance = analyze_temporal_importance(importance_matrix)
 
@@ -212,8 +201,6 @@ def create_importance_summary(importance_matrix: np.ndarray, window_size: int, n
         'important_windows': important_windows,
         'importance_matrix': importance_matrix
     }
-
-    logger.info("Feature importance summary created")
 
     return summary
 

@@ -520,4 +520,3 @@ class FCNNWrapper:
 
         return self.model.get_feature_importance(window_size, n_neurons)
 
-    

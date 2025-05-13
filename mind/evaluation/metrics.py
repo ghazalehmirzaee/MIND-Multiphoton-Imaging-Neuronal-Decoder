@@ -246,3 +246,4 @@ def evaluate_model(model, X_test, y_test) -> Dict[str, Any]:
         logger.error(f"Error during model evaluation: {e}")
         raise
 
+

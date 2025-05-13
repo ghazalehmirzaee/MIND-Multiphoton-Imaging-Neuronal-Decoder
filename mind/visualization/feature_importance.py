@@ -1,303 +1,370 @@
-# mind/visualization/feature_importance.py
+"""
+Feature importance visualization utilities for neural decoding models.
+"""
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from typing import Dict, List, Optional, Tuple, Any
-import os
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple, Union, Any
+import logging
+
+logger = logging.getLogger(__name__)
 
 
-def plot_feature_importance_heatmap(feature_importances: np.ndarray,
-                                    window_size: int,
-                                    num_neurons: int,
-                                    title: str = 'Feature Importance Heatmap',
-                                    output_dir: Optional[str] = None,
-                                    save_filename: Optional[str] = None,
-                                    figsize: Tuple[int, int] = (12, 10)) -> plt.Figure:
+def plot_temporal_importance(importance_matrix: np.ndarray,
+                             model_name: str,
+                             signal_name: str,
+                             output_dir: Optional[Union[str, Path]] = None,
+                             fig_size: Tuple[int, int] = (10, 6)) -> plt.Figure:
+    """
+    Plot temporal importance pattern.
+
+    Parameters
+    ----------
+    importance_matrix : np.ndarray
+        Feature importance matrix, shape (window_size, n_neurons)
+    model_name : str
+        Name of the model
+    signal_name : str
+        Name of the signal type
+    output_dir : Optional[Union[str, Path]], optional
+        Directory to save the figure, by default None
+    fig_size : Tuple[int, int], optional
+        Figure size, by default (10, 6)
+
+    Returns
+    -------
+    plt.Figure
+        The figure object
+    """
+    logger.info(f"Plotting temporal importance for {model_name} on {signal_name}")
+
+    # Calculate temporal importance by averaging across neurons
+    temporal_importance = np.mean(importance_matrix, axis=1)
+
+    # Normalize temporal importance
+    if temporal_importance.sum() > 0:
+        temporal_importance = temporal_importance / temporal_importance.sum()
+
+    # Create figure
+    fig, ax = plt.subplots(figsize=fig_size)
+
+    # Plot temporal importance
+    ax.bar(range(len(temporal_importance)), temporal_importance)
+
+    # Set labels
+    ax.set_xlabel("Time Step")
+    ax.set_ylabel("Importance")
+    ax.set_title(f"Temporal Importance - {model_name} - {signal_name}")
+
+    # Save figure if output directory is provided
+    if output_dir is not None:
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        fig.savefig(output_dir / f"temporal_importance_{model_name}_{signal_name}.png", dpi=300, bbox_inches='tight')
+        logger.info(
+            f"Saved temporal importance to {output_dir / f'temporal_importance_{model_name}_{signal_name}.png'}")
+
+    return fig
+
+
+def plot_neuron_importance(importance_matrix: np.ndarray,
+                           top_neuron_indices: np.ndarray,
+                           model_name: str,
+                           signal_name: str,
+                           output_dir: Optional[Union[str, Path]] = None,
+                           n_top: int = 20,
+                           fig_size: Tuple[int, int] = (12, 6)) -> plt.Figure:
+    """
+    Plot neuron importance for top neurons.
+
+    Parameters
+    ----------
+    importance_matrix : np.ndarray
+        Feature importance matrix, shape (window_size, n_neurons)
+    top_neuron_indices : np.ndarray
+        Indices of top neurons, shape (n_top,)
+    model_name : str
+        Name of the model
+    signal_name : str
+        Name of the signal type
+    output_dir : Optional[Union[str, Path]], optional
+        Directory to save the figure, by default None
+    n_top : int, optional
+        Number of top neurons to plot, by default 20
+    fig_size : Tuple[int, int], optional
+        Figure size, by default (12, 6)
+
+    Returns
+    -------
+    plt.Figure
+        The figure object
+    """
+    logger.info(f"Plotting neuron importance for {model_name} on {signal_name}")
+
+    # Calculate neuron importance by averaging across time steps
+    neuron_importance = np.mean(importance_matrix, axis=0)
+
+    # Normalize neuron importance
+    if neuron_importance.sum() > 0:
+        neuron_importance = neuron_importance / neuron_importance.sum()
+
+    # Get top neuron indices
+    n_top = min(n_top, len(top_neuron_indices))
+    top_indices = top_neuron_indices[:n_top]
+
+    # Get importance values for top neurons
+    top_importances = neuron_importance[top_indices]
+
+    # Create figure
+    fig, ax = plt.subplots(figsize=fig_size)
+
+    # Create bar plot with colors based on importance
+    bars = ax.bar(range(n_top), top_importances)
+
+    # Set colors based on importance
+    colors = plt.cm.viridis(top_importances / top_importances.max())
+    for bar, color in zip(bars, colors):
+        bar.set_color(color)
+
+    # Set labels
+    ax.set_xlabel("Neuron Rank")
+    ax.set_ylabel("Importance")
+    ax.set_title(f"Top {n_top} Neuron Importance - {model_name} - {signal_name}")
+    ax.set_xticks(range(n_top))
+    ax.set_xticklabels([f"N{idx}" for idx in top_indices], rotation=90)
+
+    # Save figure if output directory is provided
+    if output_dir is not None:
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        fig.savefig(output_dir / f"neuron_importance_{model_name}_{signal_name}.png", dpi=300, bbox_inches='tight')
+        logger.info(f"Saved neuron importance to {output_dir / f'neuron_importance_{model_name}_{signal_name}.png'}")
+
+    return fig
+
+
+def plot_importance_heatmap(importance_matrix: np.ndarray,
+                            model_name: str,
+                            signal_name: str,
+                            output_dir: Optional[Union[str, Path]] = None,
+                            fig_size: Tuple[int, int] = (12, 8)) -> plt.Figure:
     """
     Plot feature importance heatmap.
 
     Parameters
     ----------
-    feature_importances : np.ndarray
-        Feature importance values
-    window_size : int
-        Size of the sliding window
-    num_neurons : int
-        Number of neurons
-    title : str, optional
-        Title of the plot
-    output_dir : str, optional
-        Directory to save the plot
-    save_filename : str, optional
-        Filename to save the plot
-    figsize : Tuple[int, int], optional
-        Figure size
+    importance_matrix : np.ndarray
+        Feature importance matrix, shape (window_size, n_neurons)
+    model_name : str
+        Name of the model
+    signal_name : str
+        Name of the signal type
+    output_dir : Optional[Union[str, Path]], optional
+        Directory to save the figure, by default None
+    fig_size : Tuple[int, int], optional
+        Figure size, by default (12, 8)
 
     Returns
     -------
     plt.Figure
-        Matplotlib figure object
+        The figure object
     """
-    # Reshape feature importances to (window_size, num_neurons)
-    feature_importances_reshaped = feature_importances.reshape(window_size, num_neurons)
+    logger.info(f"Plotting importance heatmap for {model_name} on {signal_name}")
 
     # Create figure
-    fig, ax = plt.subplots(figsize=figsize)
+    fig, ax = plt.subplots(figsize=fig_size)
 
     # Plot heatmap
-    im = ax.imshow(feature_importances_reshaped, aspect='auto', cmap='viridis')
+    sns.heatmap(importance_matrix, cmap='viridis', cbar_kws={'label': 'Importance'}, ax=ax)
 
-    # Set labels and title
-    ax.set_title(title, fontsize=16)
-    ax.set_xlabel('Neuron Index', fontsize=14)
-    ax.set_ylabel('Time Step', fontsize=14)
+    # Set labels
+    ax.set_xlabel("Neuron")
+    ax.set_ylabel("Time Step")
+    ax.set_title(f"Feature Importance Heatmap - {model_name} - {signal_name}")
 
-    # Add colorbar
-    plt.colorbar(im, ax=ax)
-
-    # Adjust layout
-    fig.tight_layout()
-
-    # Save figure if output directory and filename are provided
-    if output_dir is not None and save_filename is not None:
-        os.makedirs(output_dir, exist_ok=True)
-        save_path = os.path.join(output_dir, save_filename)
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Figure saved to {save_path}")
-
-    return fig
-
-
-def plot_temporal_feature_importance(feature_importances: np.ndarray,
-                                     window_size: int,
-                                     num_neurons: int,
-                                     title: str = 'Temporal Feature Importance',
-                                     output_dir: Optional[str] = None,
-                                     save_filename: Optional[str] = None,
-                                     figsize: Tuple[int, int] = (10, 6)) -> plt.Figure:
-    """
-    Plot temporal feature importance.
-
-    Parameters
-    ----------
-    feature_importances : np.ndarray
-        Feature importance values
-    window_size : int
-        Size of the sliding window
-    num_neurons : int
-        Number of neurons
-    title : str, optional
-        Title of the plot
-    output_dir : str, optional
-        Directory to save the plot
-    save_filename : str, optional
-        Filename to save the plot
-    figsize : Tuple[int, int], optional
-        Figure size
-
-    Returns
-    -------
-    plt.Figure
-        Matplotlib figure object
-    """
-    # Reshape feature importances to (window_size, num_neurons)
-    feature_importances_reshaped = feature_importances.reshape(window_size, num_neurons)
-
-    # Compute mean importance across neurons for each time step
-    temporal_importance = np.mean(feature_importances_reshaped, axis=1)
-
-    # Create figure
-    fig, ax = plt.subplots(figsize=figsize)
-
-    # Plot bar chart
-    ax.bar(range(window_size), temporal_importance, color='skyblue')
-
-    # Set labels and title
-    ax.set_title(title, fontsize=16)
-    ax.set_xlabel('Time Step', fontsize=14)
-    ax.set_ylabel('Mean Feature Importance', fontsize=14)
-
-    # Adjust layout
-    fig.tight_layout()
-
-    # Save figure if output directory and filename are provided
-    if output_dir is not None and save_filename is not None:
-        os.makedirs(output_dir, exist_ok=True)
-        save_path = os.path.join(output_dir, save_filename)
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Figure saved to {save_path}")
-
-    return fig
-
-
-def plot_neuron_feature_importance(feature_importances: np.ndarray,
-                                   window_size: int,
-                                   num_neurons: int,
-                                   top_n: int = 20,
-                                   title: str = 'Top Neuron Feature Importance',
-                                   output_dir: Optional[str] = None,
-                                   save_filename: Optional[str] = None,
-                                   figsize: Tuple[int, int] = (12, 8)) -> plt.Figure:
-    """
-    Plot feature importance for top neurons.
-
-    Parameters
-    ----------
-    feature_importances : np.ndarray
-        Feature importance values
-    window_size : int
-        Size of the sliding window
-    num_neurons : int
-        Number of neurons
-    top_n : int, optional
-        Number of top neurons to plot
-    title : str, optional
-        Title of the plot
-    output_dir : str, optional
-        Directory to save the plot
-    save_filename : str, optional
-        Filename to save the plot
-    figsize : Tuple[int, int], optional
-        Figure size
-
-    Returns
-    -------
-    plt.Figure
-        Matplotlib figure object
-    """
-    # Reshape feature importances to (window_size, num_neurons)
-    feature_importances_reshaped = feature_importances.reshape(window_size, num_neurons)
-
-    # Compute mean importance across time steps for each neuron
-    neuron_importance = np.mean(feature_importances_reshaped, axis=0)
-
-    # Get indices of top neurons
-    top_neuron_indices = np.argsort(neuron_importance)[-top_n:][::-1]
-    top_neuron_importances = neuron_importance[top_neuron_indices]
-
-    # Create figure
-    fig, ax = plt.subplots(figsize=figsize)
-
-    # Plot horizontal bar chart
-    y_pos = np.arange(top_n)
-    ax.barh(y_pos, top_neuron_importances, color='skyblue')
-
-    # Set labels and title
-    ax.set_title(title, fontsize=16)
-    ax.set_xlabel('Mean Feature Importance', fontsize=14)
-    ax.set_ylabel('Neuron Index', fontsize=14)
-    ax.set_yticks(y_pos)
-    ax.set_yticklabels([f'Neuron {idx}' for idx in top_neuron_indices])
-
-    # Adjust layout
-    fig.tight_layout()
-
-    # Save figure if output directory and filename are provided
-    if output_dir is not None and save_filename is not None:
-        os.makedirs(output_dir, exist_ok=True)
-        save_path = os.path.join(output_dir, save_filename)
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Figure saved to {save_path}")
-
-    return fig
-
-
-def plot_all_feature_importances(all_feature_importances: Dict[str, Dict[str, np.ndarray]],
-                                 window_size: int,
-                                 num_neurons: int,
-                                 output_dir: Optional[str] = None,
-                                 save_filename_prefix: Optional[str] = 'feature_importance',
-                                 figsize: Tuple[int, int] = (20, 15)) -> None:
-    """
-    Plot all feature importance visualizations for each model and signal type.
-
-    Parameters
-    ----------
-    all_feature_importances : Dict[str, Dict[str, np.ndarray]]
-        Nested dictionary with structure {signal_type: {model_name: feature_importances}}
-    window_size : int
-        Size of the sliding window
-    num_neurons : int
-        Number of neurons
-    output_dir : str, optional
-        Directory to save the plots
-    save_filename_prefix : str, optional
-        Prefix for the saved filenames
-    figsize : Tuple[int, int], optional
-        Figure size
-    """
-    # Extract signal types and model names
-    signal_types = list(all_feature_importances.keys())
-    model_names = list(all_feature_importances[signal_types[0]].keys())
-
-    # Create output directory if provided
+    # Save figure if output directory is provided
     if output_dir is not None:
-        os.makedirs(output_dir, exist_ok=True)
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Plot heatmaps
-    for signal_type in signal_types:
-        for model_name in model_names:
-            feature_importances = all_feature_importances[signal_type][model_name]
+        fig.savefig(output_dir / f"importance_heatmap_{model_name}_{signal_name}.png", dpi=300, bbox_inches='tight')
+        logger.info(f"Saved importance heatmap to {output_dir / f'importance_heatmap_{model_name}_{signal_name}.png'}")
 
-            # Plot heatmap
-            title = f'Feature Importance Heatmap - {model_name} - {signal_type}'
-            save_filename = f'{save_filename_prefix}_heatmap_{model_name}_{signal_type}.png'
-            plot_feature_importance_heatmap(
-                feature_importances, window_size, num_neurons,
-                title=title, output_dir=output_dir, save_filename=save_filename
-            )
+    return fig
 
-            # Plot temporal importance
-            title = f'Temporal Feature Importance - {model_name} - {signal_type}'
-            save_filename = f'{save_filename_prefix}_temporal_{model_name}_{signal_type}.png'
-            plot_temporal_feature_importance(
-                feature_importances, window_size, num_neurons,
-                title=title, output_dir=output_dir, save_filename=save_filename
-            )
 
-            # Plot neuron importance
-            title = f'Top Neuron Feature Importance - {model_name} - {signal_type}'
-            save_filename = f'{save_filename_prefix}_neuron_{model_name}_{signal_type}.png'
-            plot_neuron_feature_importance(
-                feature_importances, window_size, num_neurons,
-                title=title, output_dir=output_dir, save_filename=save_filename
-            )
+def plot_importance_comparison(importance_matrices: Dict[str, np.ndarray],
+                               model_name: str,
+                               output_dir: Optional[Union[str, Path]] = None,
+                               fig_size: Tuple[int, int] = (15, 5)) -> plt.Figure:
+    """
+    Plot comparison of importance patterns across signal types.
 
-    # Also create comparison plots
+    Parameters
+    ----------
+    importance_matrices : Dict[str, np.ndarray]
+        Dictionary of importance matrices for different signal types
+    model_name : str
+        Name of the model
+    output_dir : Optional[Union[str, Path]], optional
+        Directory to save the figure, by default None
+    fig_size : Tuple[int, int], optional
+        Figure size, by default (15, 5)
 
-    # Plot temporal importance comparison across signal types for each model
-    for model_name in model_names:
-        fig, axes = plt.subplots(1, len(signal_types), figsize=figsize, sharey=True)
+    Returns
+    -------
+    plt.Figure
+        The figure object
+    """
+    logger.info(f"Plotting importance comparison for {model_name}")
 
-        # Make sure axes is a list
-        if len(signal_types) == 1:
-            axes = [axes]
+    # Get signal types
+    signal_types = list(importance_matrices.keys())
 
-        for i, (signal_type, ax) in enumerate(zip(signal_types, axes)):
-            feature_importances = all_feature_importances[signal_type][model_name]
-            feature_importances_reshaped = feature_importances.reshape(window_size, num_neurons)
-            temporal_importance = np.mean(feature_importances_reshaped, axis=1)
+    # Calculate temporal importance for each signal type
+    temporal_importances = {}
+    for signal_type, matrix in importance_matrices.items():
+        temporal_importance = np.mean(matrix, axis=1)
+        if temporal_importance.sum() > 0:
+            temporal_importance = temporal_importance / temporal_importance.sum()
+        temporal_importances[signal_type] = temporal_importance
 
-            # Plot bar chart
-            ax.bar(range(window_size), temporal_importance, color='skyblue')
+    # Create figure
+    fig, axes = plt.subplots(1, len(signal_types), figsize=fig_size)
 
-            # Set labels and title
-            ax.set_title(f'{signal_type}', fontsize=14)
-            ax.set_xlabel('Time Step', fontsize=12)
-            if i == 0:
-                ax.set_ylabel('Mean Feature Importance', fontsize=12)
+    # Handle case with only one signal type
+    if len(signal_types) == 1:
+        axes = [axes]
 
-        # Set overall title
-        fig.suptitle(f'Temporal Feature Importance Comparison - {model_name}', fontsize=16)
+    # Plot temporal importance for each signal type
+    for i, signal_type in enumerate(signal_types):
+        axes[i].bar(range(len(temporal_importances[signal_type])), temporal_importances[signal_type])
+        axes[i].set_title(f"{signal_type}")
+        axes[i].set_xlabel("Time Step")
+        axes[i].set_ylabel("Importance")
 
-        # Adjust layout
-        plt.tight_layout()
-        plt.subplots_adjust(top=0.9)
+    # Set overall title
+    fig.suptitle(f"Temporal Importance Comparison - {model_name}", fontsize=16)
 
-        # Save figure
-        if output_dir is not None and save_filename_prefix is not None:
-            save_path = os.path.join(output_dir,
-                                     f'{save_filename_prefix}_temporal_comparison_{model_name}.png')
-            plt.savefig(save_path, dpi=300, bbox_inches='tight')
-            print(f"Figure saved to {save_path}")
+    # Adjust layout
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+
+    # Save figure if output directory is provided
+    if output_dir is not None:
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        fig.savefig(output_dir / f"temporal_importance_comparison_{model_name}.png", dpi=300, bbox_inches='tight')
+        logger.info(
+            f"Saved temporal importance comparison to {output_dir / f'temporal_importance_comparison_{model_name}.png'}")
+
+    return fig
+
+
+def plot_cross_model_importance(temporal_importances: Dict[str, Dict[str, np.ndarray]],
+                                signal_type: str,
+                                output_dir: Optional[Union[str, Path]] = None,
+                                fig_size: Tuple[int, int] = (12, 8)) -> plt.Figure:
+    """
+    Plot temporal importance patterns across different models for a specific signal type.
+
+    Parameters
+    ----------
+    temporal_importances : Dict[str, Dict[str, np.ndarray]]
+        Dictionary of temporal importances for different models and signal types
+    signal_type : str
+        Signal type to plot
+    output_dir : Optional[Union[str, Path]], optional
+        Directory to save the figure, by default None
+    fig_size : Tuple[int, int], optional
+        Figure size, by default (12, 8)
+
+    Returns
+    -------
+    plt.Figure
+        The figure object
+    """
+    logger.info(f"Plotting cross-model importance for {signal_type}")
+
+    # Get models
+    models = list(temporal_importances.keys())
+
+    # Create figure
+    fig, ax = plt.subplots(figsize=fig_size)
+
+    # Plot temporal importance for each model
+    for model in models:
+        if signal_type in temporal_importances[model]:
+            ax.plot(temporal_importances[model][signal_type], label=model)
+
+    # Set labels
+    ax.set_xlabel("Time Step")
+    ax.set_ylabel("Importance")
+    ax.set_title(f"Temporal Importance Patterns - {signal_type}")
+
+    # Add legend
+    ax.legend()
+
+    # Add grid
+    ax.grid(True, alpha=0.3)
+
+    # Save figure if output directory is provided
+    if output_dir is not None:
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        fig.savefig(output_dir / f"cross_model_importance_{signal_type}.png", dpi=300, bbox_inches='tight')
+        logger.info(f"Saved cross-model importance to {output_dir / f'cross_model_importance_{signal_type}.png'}")
+
+    return fig
+
+
+def find_important_time_windows(importance_matrix: np.ndarray,
+                                percentile: float = 90) -> List[Tuple[int, int]]:
+    """
+    Find time windows with high feature importance.
+
+    Parameters
+    ----------
+    importance_matrix : np.ndarray
+        Feature importance matrix, shape (window_size, n_neurons)
+    percentile : float, optional
+        Percentile threshold for importance, by default 90
+
+    Returns
+    -------
+    List[Tuple[int, int]]
+        List of (start, end) time windows
+    """
+    # Calculate temporal importance
+    temporal_importance = np.mean(importance_matrix, axis=1)
+
+    # Calculate threshold
+    threshold = np.percentile(temporal_importance, percentile)
+
+    # Find time points above threshold
+    above_threshold = temporal_importance > threshold
+
+    # Find contiguous segments
+    segments = []
+    start = None
+
+    for i, above in enumerate(above_threshold):
+        if above and start is None:
+            start = i
+        elif not above and start is not None:
+            segments.append((start, i - 1))
+            start = None
+
+    # Handle case where the last segment extends to the end
+    if start is not None:
+        segments.append((start, len(above_threshold) - 1))
+
+    logger.info(f"Found {len(segments)} important time windows with percentile {percentile}")
+
+    return segments
+
 

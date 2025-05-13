@@ -1,245 +1,200 @@
-"""Experiment tracking utility functions."""
-from typing import Dict, Any, List, Optional, Union
-import logging
+"""
+Experiment tracking with Weights & Biases.
+"""
 import os
-import matplotlib.pyplot as plt
-import numpy as np
-import json
-import time
-import datetime
 import wandb
-from omegaconf import DictConfig, OmegaConf
+from typing import Dict, Optional, Any, Union
+import logging
+from pathlib import Path
+import json
 
-# Set up logger
 logger = logging.getLogger(__name__)
 
 
-def log_metrics(
-        wandb_run: Any,
-        metrics: Dict[str, float],
-        step: Optional[int] = None
-) -> None:
+def init_wandb(project_name: str = "mind-calcium-imaging",
+               entity: Optional[str] = None,
+               api_key: Optional[str] = None,
+               config: Optional[Dict[str, Any]] = None,
+               log_dir: Optional[Union[str, Path]] = None) -> bool:
     """
-    Log metrics to Weights & Biases.
+    Initialize Weights & Biases for experiment tracking.
 
     Parameters
     ----------
-    wandb_run : Any
-        Weights & Biases run
-    metrics : Dict[str, float]
-        Dictionary containing metrics to log
-    step : Optional[int], optional
-        Step for logging metrics, by default None
-    """
-    if wandb_run is not None:
-        wandb_run.log(metrics, step=step)
-
-
-def log_figures(
-        wandb_run: Any,
-        figures: Dict[str, plt.Figure],
-        step: Optional[int] = None
-) -> None:
-    """
-    Log figures to Weights & Biases.
-
-    Parameters
-    ----------
-    wandb_run : Any
-        Weights & Biases run
-    figures : Dict[str, plt.Figure]
-        Dictionary containing figures to log
-    step : Optional[int], optional
-        Step for logging figures, by default None
-    """
-    if wandb_run is not None:
-        for name, fig in figures.items():
-            wandb_run.log({name: wandb.Image(fig)}, step=step)
-
-
-def log_artifact(
-        wandb_run: Any,
-        artifact_path: str,
-        artifact_name: str,
-        artifact_type: str = 'model'
-) -> None:
-    """
-    Log artifact to Weights & Biases.
-
-    Parameters
-    ----------
-    wandb_run : Any
-        Weights & Biases run
-    artifact_path : str
-        Path to artifact file
-    artifact_name : str
-        Name of the artifact
-    artifact_type : str, optional
-        Type of the artifact, by default 'model'
-    """
-    if wandb_run is not None:
-        try:
-            # Add timestamp to artifact name
-            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            full_artifact_name = f"{artifact_name}_{timestamp}"
-
-            # Create artifact
-            artifact = wandb.Artifact(
-                name=full_artifact_name,
-                type=artifact_type,
-                description=f'{artifact_name} {artifact_type}'
-            )
-
-            # Add file to artifact
-            artifact.add_file(artifact_path)
-
-            # Log artifact
-            wandb_run.log_artifact(artifact)
-
-            logger.info(f"Logged artifact {full_artifact_name} to W&B")
-        except Exception as e:
-            logger.error(f"Error logging artifact to W&B: {e}")
-
-
-def init_wandb(
-        project_name: str,
-        experiment_name: Optional[str] = None,
-        config: Optional[Union[Dict[str, Any], DictConfig]] = None,
-        tags: Optional[List[str]] = None
-) -> Any:
-    """
-    Initialize Weights & Biases run with improved configuration handling.
-
-    Parameters
-    ----------
-    project_name : str
-        Project name
-    experiment_name : Optional[str], optional
-        Experiment name, by default None
-    config : Optional[Union[Dict[str, Any], DictConfig]], optional
-        Configuration dictionary, by default None
-    tags : Optional[List[str]], optional
-        Tags for the run, by default None
+    project_name : str, optional
+        W&B project name, by default "mind-calcium-imaging"
+    entity : Optional[str], optional
+        W&B entity (username or team name), by default None
+    api_key : Optional[str], optional
+        W&B API key, by default None
+    config : Optional[Dict[str, Any]], optional
+        Configuration for the experiment, by default None
+    log_dir : Optional[Union[str, Path]], optional
+        Directory for W&B logs, by default None
 
     Returns
     -------
-    Any
-        Weights & Biases run object or None if initialization fails
+    bool
+        True if initialization was successful, False otherwise
     """
     try:
-        # Convert OmegaConf DictConfig to dict if needed
-        if config is not None and isinstance(config, DictConfig):
-            config_dict = OmegaConf.to_container(config, resolve=True)
-        else:
-            config_dict = config
+        # Check if API key is provided or in environment
+        if api_key is not None:
+            os.environ["WANDB_API_KEY"] = api_key
 
-        # Generate a unique experiment name if not provided
-        if experiment_name is None:
-            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            experiment_name = f"experiment_{timestamp}"
+        # Check if log directory is provided
+        if log_dir is not None:
+            os.environ["WANDB_DIR"] = str(log_dir)
 
-        # Initialize run
-        wandb_run = wandb.init(
+        # Initialize W&B
+        wandb.init(
             project=project_name,
-            name=experiment_name,
-            config=config_dict,
-            tags=tags
+            entity=entity,
+            config=config
         )
 
-        logger.info(f"Initialized W&B run: {experiment_name}")
-        return wandb_run
+        logger.info(f"W&B initialized (project: {project_name}, entity: {entity})")
+        return True
+
     except Exception as e:
         logger.error(f"Error initializing W&B: {e}")
-        logger.warning("Continuing without W&B tracking")
-        return None
+        return False
 
 
-def save_config(
-        config: Union[Dict[str, Any], DictConfig],
-        output_file: str = 'config.json',
-        timestamp: bool = True
-) -> None:
+def log_artifact(artifact_name: str,
+                 artifact_type: str,
+                 file_path: Union[str, Path],
+                 description: Optional[str] = None,
+                 metadata: Optional[Dict[str, Any]] = None) -> bool:
     """
-    Save configuration to JSON file with optional timestamp.
+    Log an artifact to W&B.
 
     Parameters
     ----------
-    config : Union[Dict[str, Any], DictConfig]
-        Configuration dictionary or OmegaConf DictConfig
-    output_file : str, optional
-        Output file path, by default 'config.json'
-    timestamp : bool, optional
-        Whether to add timestamp to filename, by default True
-    """
-    # Add timestamp to filename if requested
-    if timestamp:
-        dirname = os.path.dirname(output_file)
-        basename = os.path.basename(output_file)
-        name, ext = os.path.splitext(basename)
-
-        timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        new_basename = f"{name}_{timestamp_str}{ext}"
-
-        output_file = os.path.join(dirname, new_basename)
-
-    # Create output directory
-    os.makedirs(os.path.dirname(output_file), exist_ok=True)
-
-    # Convert OmegaConf DictConfig to dict if needed
-    if isinstance(config, DictConfig):
-        config_dict = OmegaConf.to_container(config, resolve=True)
-    else:
-        config_dict = config
-
-    # Convert numpy types to Python native types
-    def convert_np_to_python(obj):
-        if isinstance(obj, np.ndarray):
-            return obj.tolist()
-        elif isinstance(obj, np.integer):
-            return int(obj)
-        elif isinstance(obj, np.floating):
-            return float(obj)
-        elif isinstance(obj, dict):
-            return {k: convert_np_to_python(v) for k, v in obj.items()}
-        elif isinstance(obj, list):
-            return [convert_np_to_python(item) for item in obj]
-        else:
-            return obj
-
-    config_json = convert_np_to_python(config_dict)
-
-    # Save configuration to JSON file
-    with open(output_file, 'w') as f:
-        json.dump(config_json, f, indent=4)
-
-    logger.info(f"Configuration saved to {output_file}")
-
-
-def load_config(
-        input_file: str = 'config.json'
-) -> Dict[str, Any]:
-    """
-    Load configuration from JSON file.
-
-    Parameters
-    ----------
-    input_file : str, optional
-        Input file path, by default 'config.json'
+    artifact_name : str
+        Name of the artifact
+    artifact_type : str
+        Type of the artifact (e.g., 'model', 'dataset', 'results')
+    file_path : Union[str, Path]
+        Path to the file to log
+    description : Optional[str], optional
+        Description of the artifact, by default None
+    metadata : Optional[Dict[str, Any]], optional
+        Metadata for the artifact, by default None
 
     Returns
     -------
-    Dict[str, Any]
-        Configuration dictionary
+    bool
+        True if logging was successful, False otherwise
     """
-    # Check if file exists
-    if not os.path.exists(input_file):
-        logger.warning(f"Configuration file {input_file} not found")
-        return {}
+    try:
+        # Create artifact
+        artifact = wandb.Artifact(
+            name=artifact_name,
+            type=artifact_type,
+            description=description,
+            metadata=metadata
+        )
 
-    # Load configuration from JSON file
-    with open(input_file, 'r') as f:
-        config = json.load(f)
+        # Add file to artifact
+        artifact.add_file(str(file_path))
 
-    logger.info(f"Configuration loaded from {input_file}")
-    return config
+        # Log artifact
+        wandb.log_artifact(artifact)
+
+        logger.info(f"Artifact {artifact_name} logged to W&B")
+        return True
+
+    except Exception as e:
+        logger.error(f"Error logging artifact to W&B: {e}")
+        return False
+
+
+def log_results(results: Dict[str, Any],
+                prefix: Optional[str] = None,
+                step: Optional[int] = None) -> bool:
+    """
+    Log results to W&B.
+
+    Parameters
+    ----------
+    results : Dict[str, Any]
+        Results to log
+    prefix : Optional[str], optional
+        Prefix for the metrics, by default None
+    step : Optional[int], optional
+        Step for the metrics, by default None
+
+    Returns
+    -------
+    bool
+        True if logging was successful, False otherwise
+    """
+    try:
+        # Apply prefix if provided
+        if prefix is not None:
+            results = {f"{prefix}/{k}": v for k, v in results.items()}
+
+        # Log results
+        wandb.log(results, step=step)
+
+        logger.info(f"Results logged to W&B")
+        return True
+
+    except Exception as e:
+        logger.error(f"Error logging results to W&B: {e}")
+        return False
+
+
+def log_model(model, model_name: str, metadata: Optional[Dict[str, Any]] = None) -> bool:
+    """
+    Log a model to W&B.
+
+    Parameters
+    ----------
+    model : model object
+        Model to log
+    model_name : str
+        Name of the model
+    metadata : Optional[Dict[str, Any]], optional
+        Metadata for the model, by default None
+
+    Returns
+    -------
+    bool
+        True if logging was successful, False otherwise
+    """
+    try:
+        # Log model
+        wandb.log({f"models/{model_name}": model})
+
+        # Log metadata if provided
+        if metadata is not None:
+            wandb.log({f"model_metadata/{model_name}": metadata})
+
+        logger.info(f"Model {model_name} logged to W&B")
+        return True
+
+    except Exception as e:
+        logger.error(f"Error logging model to W&B: {e}")
+        return False
+
+
+def finish_wandb() -> bool:
+    """
+    Finish the current W&B run.
+
+    Returns
+    -------
+    bool
+        True if finishing was successful, False otherwise
+    """
+    try:
+        wandb.finish()
+        logger.info("W&B run finished")
+        return True
+
+    except Exception as e:
+        logger.error(f"Error finishing W&B run: {e}")
+        return False
 

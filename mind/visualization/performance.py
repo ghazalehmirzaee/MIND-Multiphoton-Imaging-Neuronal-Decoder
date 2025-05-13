@@ -1,520 +1,378 @@
-# mind/visualization/performance.py
+"""
+Performance visualization utilities for model evaluation.
+"""
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from typing import Dict, List, Optional, Tuple, Any
-from sklearn.metrics import confusion_matrix, roc_curve, auc, precision_recall_curve, average_precision_score
-import os
+import pandas as pd
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple, Union, Any
+import logging
+
+logger = logging.getLogger(__name__)
 
 
-def plot_confusion_matrix(y_true: np.ndarray,
-                          y_pred: np.ndarray,
-                          classes: List[str],
-                          title: str = 'Confusion Matrix',
-                          normalize: bool = True,
-                          output_dir: Optional[str] = None,
-                          save_filename: Optional[str] = None,
-                          figsize: Tuple[int, int] = (8, 6)) -> plt.Figure:
+def plot_performance_radar(performance_df: pd.DataFrame,
+                           output_dir: Optional[Union[str, Path]] = None,
+                           metrics: List[str] = ['Accuracy', 'Precision', 'Recall', 'F1 Score'],
+                           fig_size: Tuple[int, int] = (15, 6)) -> plt.Figure:
+    """
+    Plot radar charts comparing model performance across signal types.
+
+    Parameters
+    ----------
+    performance_df : pd.DataFrame
+        DataFrame containing performance metrics
+    output_dir : Optional[Union[str, Path]], optional
+        Directory to save the figure, by default None
+    metrics : List[str], optional
+        Metrics to include in the radar chart, by default ['Accuracy', 'Precision', 'Recall', 'F1 Score']
+    fig_size : Tuple[int, int], optional
+        Figure size, by default (15, 6)
+
+    Returns
+    -------
+    plt.Figure
+        The figure object
+    """
+    logger.info("Plotting performance radar charts")
+
+    # Get unique signal types
+    signal_types = performance_df['Signal Type'].unique()
+
+    # Create figure
+    fig, axes = plt.subplots(1, len(signal_types), figsize=fig_size, subplot_kw=dict(polar=True))
+
+    # Handle case with only one signal type
+    if len(signal_types) == 1:
+        axes = [axes]
+
+    for ax, signal_type in zip(axes, signal_types):
+        # Filter data for this signal type
+        signal_df = performance_df[performance_df['Signal Type'] == signal_type]
+
+        # Get number of models and metrics
+        n_models = len(signal_df)
+        n_metrics = len(metrics)
+
+        # Calculate angles for radar plot
+        angles = np.linspace(0, 2 * np.pi, n_metrics, endpoint=False).tolist()
+        angles += angles[:1]  # Close the loop
+
+        # Create radar plot
+        ax.set_theta_offset(np.pi / 2)
+        ax.set_theta_direction(-1)
+
+        # Set labels
+        ax.set_xticks(angles[:-1])
+        ax.set_xticklabels(metrics)
+
+        # Set y-axis limits
+        ax.set_ylim(0, 1)
+        ax.set_yticks([0.2, 0.4, 0.6, 0.8, 1.0])
+        ax.set_yticklabels(['0.2', '0.4', '0.6', '0.8', '1.0'])
+
+        # Plot data for each model
+        for _, row in signal_df.iterrows():
+            values = [row[metric] for metric in metrics]
+            values += values[:1]  # Close the loop
+
+            ax.plot(angles, values, linewidth=2, label=row['Model'])
+            ax.fill(angles, values, alpha=0.1)
+
+        # Set title
+        ax.set_title(f"{signal_type}")
+
+    # Add legend to the last axis
+    axes[-1].legend(loc='lower right', bbox_to_anchor=(1.2, 0))
+
+    # Save figure if output directory is provided
+    if output_dir is not None:
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        fig.savefig(output_dir / "performance_radar.png", dpi=300, bbox_inches='tight')
+        logger.info(f"Saved performance radar chart to {output_dir / 'performance_radar.png'}")
+
+    return fig
+
+
+def plot_performance_bars(performance_df: pd.DataFrame,
+                          output_dir: Optional[Union[str, Path]] = None,
+                          metric: str = 'Accuracy',
+                          fig_size: Tuple[int, int] = (12, 6)) -> plt.Figure:
+    """
+    Plot bar chart comparing model performance for a specific metric.
+
+    Parameters
+    ----------
+    performance_df : pd.DataFrame
+        DataFrame containing performance metrics
+    output_dir : Optional[Union[str, Path]], optional
+        Directory to save the figure, by default None
+    metric : str, optional
+        Metric to plot, by default 'Accuracy'
+    fig_size : Tuple[int, int], optional
+        Figure size, by default (12, 6)
+
+    Returns
+    -------
+    plt.Figure
+        The figure object
+    """
+    logger.info(f"Plotting {metric} bar chart")
+
+    # Create figure
+    fig, ax = plt.subplots(figsize=fig_size)
+
+    # Create grouped bar plot
+    sns.barplot(x='Signal Type', y=metric, hue='Model', data=performance_df, ax=ax)
+
+    # Add value labels on top of bars
+    for p in ax.patches:
+        ax.annotate(f'{p.get_height():.3f}',
+                    (p.get_x() + p.get_width() / 2., p.get_height()),
+                    ha='center', va='bottom', fontsize=10)
+
+    # Set title and labels
+    ax.set_title(f"{metric} Comparison")
+    ax.set_xlabel("Signal Type")
+    ax.set_ylabel(metric)
+
+    # Adjust legend
+    ax.legend(title="Model", bbox_to_anchor=(1.05, 1), loc='upper left')
+
+    # Save figure if output directory is provided
+    if output_dir is not None:
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        fig.savefig(output_dir / f"{metric.lower().replace(' ', '_')}_comparison.png", dpi=300, bbox_inches='tight')
+        logger.info(f"Saved {metric} bar chart to {output_dir / f'{metric.lower().replace(' ', '_')}_comparison.png'}")
+
+    return fig
+
+
+def plot_confusion_matrix(cm: np.ndarray,
+                          model_name: str,
+                          signal_type: str,
+                          output_dir: Optional[Union[str, Path]] = None,
+                          fig_size: Tuple[int, int] = (8, 6)) -> plt.Figure:
     """
     Plot confusion matrix.
 
     Parameters
     ----------
-    y_true : np.ndarray
-        True labels
-    y_pred : np.ndarray
-        Predicted labels
-    classes : List[str]
-        List of class names
-    title : str, optional
-        Title of the plot
-    normalize : bool, optional
-        Whether to normalize the confusion matrix
-    output_dir : str, optional
-        Directory to save the plot
-    save_filename : str, optional
-        Filename to save the plot
-    figsize : Tuple[int, int], optional
-        Figure size
+    cm : np.ndarray
+        Confusion matrix, shape (2, 2) for binary classification
+    model_name : str
+        Name of the model
+    signal_type : str
+        Type of signal
+    output_dir : Optional[Union[str, Path]], optional
+        Directory to save the figure, by default None
+    fig_size : Tuple[int, int], optional
+        Figure size, by default (8, 6)
 
     Returns
     -------
     plt.Figure
-        Matplotlib figure object
+        The figure object
     """
-    # Compute confusion matrix
-    cm = confusion_matrix(y_true, y_pred)
+    logger.info(f"Plotting confusion matrix for {model_name} on {signal_type}")
 
-    # Normalize if required
-    if normalize:
-        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis] * 100
-        fmt = '.1f'
-        vmax = 100
-    else:
-        fmt = 'd'
-        vmax = np.max(cm)
+    # Calculate row-wise percentages
+    cm_percent = cm.astype(float) / cm.sum(axis=1)[:, np.newaxis] * 100
 
     # Create figure
-    fig, ax = plt.subplots(figsize=figsize)
+    fig, ax = plt.subplots(figsize=fig_size)
 
-    # Plot heatmap
-    im = ax.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues, vmax=vmax)
-    plt.colorbar(im, ax=ax)
+    # Plot confusion matrix
+    sns.heatmap(cm_percent, annot=True, fmt='.1f', cmap='Blues', cbar=False, ax=ax)
 
     # Set labels
-    ax.set(xticks=np.arange(cm.shape[1]),
-           yticks=np.arange(cm.shape[0]),
-           xticklabels=classes, yticklabels=classes,
-           title=title,
-           ylabel='True label',
-           xlabel='Predicted label')
+    ax.set_xlabel('Predicted')
+    ax.set_ylabel('True')
 
-    # Rotate x tick labels
-    plt.setp(ax.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")
+    # Set title
+    ax.set_title(f"{model_name} - {signal_type}")
 
-    # Loop over data dimensions and create text annotations
-    thresh = cm.max() / 2.
-    for i in range(cm.shape[0]):
-        for j in range(cm.shape[1]):
-            ax.text(j, i, format(cm[i, j], fmt),
-                    ha="center", va="center",
-                    color="white" if cm[i, j] > thresh else "black")
+    # Set tick labels
+    ax.set_xticklabels(['No Footstep', 'Contralateral'])
+    ax.set_yticklabels(['No Footstep', 'Contralateral'])
 
-    # Adjust layout
-    fig.tight_layout()
+    # Save figure if output directory is provided
+    if output_dir is not None:
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Save figure if output directory and filename are provided
-    if output_dir is not None and save_filename is not None:
-        os.makedirs(output_dir, exist_ok=True)
-        save_path = os.path.join(output_dir, save_filename)
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Figure saved to {save_path}")
+        fig.savefig(output_dir / f"confusion_matrix_{model_name}_{signal_type}.png", dpi=300, bbox_inches='tight')
+        logger.info(f"Saved confusion matrix to {output_dir / f'confusion_matrix_{model_name}_{signal_type}.png'}")
 
     return fig
 
 
-def plot_model_performance_comparison(results: Dict[str, Dict[str, Dict[str, float]]],
-                                      metric: str = 'accuracy',
-                                      title: str = 'Model Performance Comparison',
-                                      output_dir: Optional[str] = None,
-                                      save_filename: Optional[str] = None,
-                                      figsize: Tuple[int, int] = (12, 8)) -> plt.Figure:
+def plot_performance_improvement(performance_df: pd.DataFrame,
+                                 baseline_signal: str = 'calcium_signal',
+                                 output_dir: Optional[Union[str, Path]] = None,
+                                 metric: str = 'Accuracy',
+                                 fig_size: Tuple[int, int] = (12, 6)) -> plt.Figure:
     """
-    Plot comparison of model performance across different signal types.
+    Plot performance improvement compared to a baseline signal type.
 
     Parameters
     ----------
-    results : Dict[str, Dict[str, Dict[str, float]]]
-        Nested dictionary with structure {signal_type: {model_name: {metric: value}}}
+    performance_df : pd.DataFrame
+        DataFrame containing performance metrics
+    baseline_signal : str, optional
+        Baseline signal type, by default 'calcium_signal'
+    output_dir : Optional[Union[str, Path]], optional
+        Directory to save the figure, by default None
     metric : str, optional
-        Performance metric to plot
-    title : str, optional
-        Title of the plot
-    output_dir : str, optional
-        Directory to save the plot
-    save_filename : str, optional
-        Filename to save the plot
-    figsize : Tuple[int, int], optional
-        Figure size
+        Metric to plot, by default 'Accuracy'
+    fig_size : Tuple[int, int], optional
+        Figure size, by default (12, 6)
 
     Returns
     -------
     plt.Figure
-        Matplotlib figure object
+        The figure object
     """
-    # Extract signal types and model names
-    signal_types = list(results.keys())
-    model_names = list(results[signal_types[0]].keys())
+    logger.info(f"Plotting {metric} improvement compared to {baseline_signal}")
 
-    # Create a DataFrame to hold the results
-    import pandas as pd
-    data = []
-    for signal_type in signal_types:
-        for model_name in model_names:
-            value = results[signal_type][model_name][metric]
-            data.append({
+    # Get unique models and signal types
+    models = performance_df['Model'].unique()
+    signal_types = [s for s in performance_df['Signal Type'].unique() if s != baseline_signal]
+
+    # Calculate improvement for each model and signal type
+    improvement_data = []
+
+    for model in models:
+        model_df = performance_df[performance_df['Model'] == model]
+
+        # Get baseline performance
+        baseline_perf = model_df[model_df['Signal Type'] == baseline_signal][metric].values
+
+        # Skip if baseline performance is missing
+        if len(baseline_perf) == 0:
+            continue
+
+        baseline_perf = baseline_perf[0]
+
+        # Calculate improvement for each signal type
+        for signal_type in signal_types:
+            signal_perf = model_df[model_df['Signal Type'] == signal_type][metric].values
+
+            # Skip if signal performance is missing
+            if len(signal_perf) == 0:
+                continue
+
+            signal_perf = signal_perf[0]
+
+            # Calculate improvement (in percentage points)
+            improvement = (signal_perf - baseline_perf) * 100
+
+            improvement_data.append({
+                'Model': model,
                 'Signal Type': signal_type,
-                'Model': model_name,
-                f'{metric.capitalize()}': value
+                'Improvement': improvement
             })
-    df = pd.DataFrame(data)
+
+    # Create DataFrame
+    improvement_df = pd.DataFrame(improvement_data)
 
     # Create figure
-    fig, ax = plt.subplots(figsize=figsize)
+    fig, ax = plt.subplots(figsize=fig_size)
 
-    # Plot grouped bar chart
-    sns.barplot(x='Model', y=f'{metric.capitalize()}', hue='Signal Type', data=df, ax=ax)
+    # Create grouped bar plot
+    sns.barplot(x='Model', y='Improvement', hue='Signal Type', data=improvement_df, ax=ax)
 
-    # Set labels and title
-    ax.set_title(title, fontsize=16)
-    ax.set_xlabel('Model', fontsize=14)
-    ax.set_ylabel(f'{metric.capitalize()}', fontsize=14)
+    # Add value labels on top of bars
+    for p in ax.patches:
+        ax.annotate(f'{p.get_height():.1f}',
+                    (p.get_x() + p.get_width() / 2., p.get_height() + 0.1),
+                    ha='center', va='bottom', fontsize=10)
+
+    # Set title and labels
+    ax.set_title(f"{metric} Improvement Compared to {baseline_signal} (Percentage Points)")
+    ax.set_xlabel("Model")
+    ax.set_ylabel(f"{metric} Improvement (pp)")
+
+    # Add horizontal line at zero
+    ax.axhline(y=0, color='black', linestyle='-', alpha=0.3)
 
     # Adjust legend
-    ax.legend(title='Signal Type', fontsize=12)
+    ax.legend(title="Signal Type")
 
-    # Adjust layout
-    fig.tight_layout()
+    # Save figure if output directory is provided
+    if output_dir is not None:
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Save figure if output directory and filename are provided
-    if output_dir is not None and save_filename is not None:
-        os.makedirs(output_dir, exist_ok=True)
-        save_path = os.path.join(output_dir, save_filename)
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Figure saved to {save_path}")
+        fig.savefig(output_dir / f"{metric.lower().replace(' ', '_')}_improvement.png", dpi=300, bbox_inches='tight')
+        logger.info(
+            f"Saved {metric} improvement chart to {output_dir / f'{metric.lower().replace(' ', '_')}_improvement.png'}")
 
     return fig
 
 
-def plot_roc_curves(y_true: np.ndarray,
-                    y_pred_probas: Dict[str, np.ndarray],
-                    title: str = 'ROC Curves',
-                    output_dir: Optional[str] = None,
-                    save_filename: Optional[str] = None,
-                    figsize: Tuple[int, int] = (10, 8)) -> plt.Figure:
+def plot_training_time_vs_performance(performance_df: pd.DataFrame,
+                                      output_dir: Optional[Union[str, Path]] = None,
+                                      metric: str = 'Accuracy',
+                                      fig_size: Tuple[int, int] = (12, 8)) -> plt.Figure:
     """
-    Plot ROC curves for multiple models.
+    Plot training time vs. performance.
 
     Parameters
     ----------
-    y_true : np.ndarray
-        True labels
-    y_pred_probas : Dict[str, np.ndarray]
-        Dictionary mapping model names to their prediction probabilities
-    title : str, optional
-        Title of the plot
-    output_dir : str, optional
-        Directory to save the plot
-    save_filename : str, optional
-        Filename to save the plot
-    figsize : Tuple[int, int], optional
-        Figure size
+    performance_df : pd.DataFrame
+        DataFrame containing performance metrics and training time
+    output_dir : Optional[Union[str, Path]], optional
+        Directory to save the figure, by default None
+    metric : str, optional
+        Metric to plot, by default 'Accuracy'
+    fig_size : Tuple[int, int], optional
+        Figure size, by default (12, 8)
 
     Returns
     -------
     plt.Figure
-        Matplotlib figure object
+        The figure object
     """
+    logger.info(f"Plotting {metric} vs. training time")
+
     # Create figure
-    fig, ax = plt.subplots(figsize=figsize)
+    fig, ax = plt.subplots(figsize=fig_size)
 
-    # Plot ROC curve for each model
-    for model_name, y_pred_proba in y_pred_probas.items():
-        # For binary classification, we need the probability of the positive class
-        if y_pred_proba.shape[1] == 2:
-            y_score = y_pred_proba[:, 1]
-        else:
-            # For multi-class, we can use one-vs-rest approach
-            y_score = y_pred_proba
+    # Create scatter plot
+    for signal_type in performance_df['Signal Type'].unique():
+        signal_df = performance_df[performance_df['Signal Type'] == signal_type]
+        ax.scatter(signal_df['Train Time'], signal_df[metric], label=signal_type, alpha=0.7, s=100)
 
-        # Compute ROC curve and area
-        fpr, tpr, _ = roc_curve(y_true, y_score)
-        roc_auc = auc(fpr, tpr)
+    # Add model labels
+    for _, row in performance_df.iterrows():
+        ax.annotate(row['Model'], (row['Train Time'], row[metric]), fontsize=8, alpha=0.7)
 
-        # Plot ROC curve
-        ax.plot(fpr, tpr, lw=2, label=f'{model_name} (AUC = {roc_auc:.3f})')
-
-    # Plot diagonal line
-    ax.plot([0, 1], [0, 1], 'k--', lw=2)
-
-    # Set labels and title
-    ax.set_xlim([0.0, 1.0])
-    ax.set_ylim([0.0, 1.05])
-    ax.set_xlabel('False Positive Rate', fontsize=14)
-    ax.set_ylabel('True Positive Rate', fontsize=14)
-    ax.set_title(title, fontsize=16)
+    # Set labels
+    ax.set_xlabel('Training Time (seconds)')
+    ax.set_ylabel(metric)
+    ax.set_title(f"{metric} vs. Training Time")
 
     # Add legend
-    ax.legend(loc='lower right', fontsize=12)
+    ax.legend()
 
-    # Adjust layout
-    fig.tight_layout()
+    # Add grid
+    ax.grid(True, alpha=0.3)
 
-    # Save figure if output directory and filename are provided
-    if output_dir is not None and save_filename is not None:
-        os.makedirs(output_dir, exist_ok=True)
-        save_path = os.path.join(output_dir, save_filename)
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Figure saved to {save_path}")
+    # Save figure if output directory is provided
+    if output_dir is not None:
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-    return fig
-
-
-def plot_precision_recall_curves(y_true: np.ndarray,
-                                 y_pred_probas: Dict[str, np.ndarray],
-                                 title: str = 'Precision-Recall Curves',
-                                 output_dir: Optional[str] = None,
-                                 save_filename: Optional[str] = None,
-                                 figsize: Tuple[int, int] = (10, 8)) -> plt.Figure:
-    """
-    Plot precision-recall curves for multiple models.
-
-    Parameters
-    ----------
-    y_true : np.ndarray
-        True labels
-    y_pred_probas : Dict[str, np.ndarray]
-        Dictionary mapping model names to their prediction probabilities
-    title : str, optional
-        Title of the plot
-    output_dir : str, optional
-        Directory to save the plot
-    save_filename : str, optional
-        Filename to save the plot
-    figsize : Tuple[int, int], optional
-        Figure size
-
-    Returns
-    -------
-    plt.Figure
-        Matplotlib figure object
-    """
-    # Create figure
-    fig, ax = plt.subplots(figsize=figsize)
-
-    # Plot precision-recall curve for each model
-    for model_name, y_pred_proba in y_pred_probas.items():
-        # For binary classification, we need the probability of the positive class
-        if y_pred_proba.shape[1] == 2:
-            y_score = y_pred_proba[:, 1]
-        else:
-            # For multi-class, we can use one-vs-rest approach
-            y_score = y_pred_proba
-
-        # Compute precision-recall curve and average precision
-        precision, recall, _ = precision_recall_curve(y_true, y_score)
-        ap = average_precision_score(y_true, y_score)
-
-        # Plot precision-recall curve
-        ax.plot(recall, precision, lw=2, label=f'{model_name} (AP = {ap:.3f})')
-
-    # Set labels and title
-    ax.set_xlim([0.0, 1.0])
-    ax.set_ylim([0.0, 1.05])
-    ax.set_xlabel('Recall', fontsize=14)
-    ax.set_ylabel('Precision', fontsize=14)
-    ax.set_title(title, fontsize=16)
-
-    # Add legend
-    ax.legend(loc='best', fontsize=12)
-
-    # Adjust layout
-    fig.tight_layout()
-
-    # Save figure if output directory and filename are provided
-    if output_dir is not None and save_filename is not None:
-        os.makedirs(output_dir, exist_ok=True)
-        save_path = os.path.join(output_dir, save_filename)
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Figure saved to {save_path}")
+        fig.savefig(output_dir / f"{metric.lower().replace(' ', '_')}_vs_training_time.png", dpi=300,
+                    bbox_inches='tight')
+        logger.info(
+            f"Saved {metric} vs. training time chart to {output_dir / f'{metric.lower().replace(' ', '_')}_vs_training_time.png'}")
 
     return fig
 
-
-def plot_all_confusion_matrices(results: Dict[str, Dict[str, Dict[str, Any]]],
-                                classes: List[str],
-                                title_prefix: str = 'Confusion Matrix',
-                                output_dir: Optional[str] = None,
-                                save_filename_prefix: Optional[str] = 'confusion_matrix',
-                                figsize: Tuple[int, int] = (20, 15)) -> Dict[str, Dict[str, plt.Figure]]:
-    """
-    Plot confusion matrices for all models and signal types.
-
-    Parameters
-    ----------
-    results : Dict[str, Dict[str, Dict[str, Any]]]
-        Nested dictionary with structure {signal_type: {model_name: {metric: value}}}
-    classes : List[str]
-        List of class names
-    title_prefix : str, optional
-        Prefix for the plot titles
-    output_dir : str, optional
-        Directory to save the plots
-    save_filename_prefix : str, optional
-        Prefix for the saved filenames
-    figsize : Tuple[int, int], optional
-        Figure size
-
-    Returns
-    -------
-    Dict[str, Dict[str, plt.Figure]]
-        Nested dictionary with structure {signal_type: {model_name: figure}}
-    """
-    # Extract signal types and model names
-    signal_types = list(results.keys())
-    model_names = list(results[signal_types[0]].keys())
-
-    # Create a figure with subplots for all models and signal types
-    fig, axes = plt.subplots(len(model_names), len(signal_types), figsize=figsize)
-
-    # Make sure axes is a 2D array
-    if len(model_names) == 1 and len(signal_types) == 1:
-        axes = np.array([[axes]])
-    elif len(model_names) == 1:
-        axes = np.array([axes])
-    elif len(signal_types) == 1:
-        axes = np.array([[ax] for ax in axes])
-
-    # Plot confusion matrices
-    for i, model_name in enumerate(model_names):
-        for j, signal_type in enumerate(signal_types):
-            # Get true and predicted labels
-            y_true = results[signal_type][model_name]['y_true']
-            y_pred = results[signal_type][model_name]['y_pred']
-
-            # Compute confusion matrix
-            cm = confusion_matrix(y_true, y_pred)
-
-            # Normalize
-            cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis] * 100
-
-            # Plot heatmap
-            ax = axes[i, j]
-            im = ax.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues, vmax=100)
-
-            # Set labels
-            ax.set(xticks=np.arange(cm.shape[1]),
-                   yticks=np.arange(cm.shape[0]),
-                   xticklabels=classes, yticklabels=classes)
-
-            # Set title
-            ax.set_title(f'{model_name} - {signal_type}', fontsize=12)
-
-            # Only set labels for the bottom and left subplots
-            if i == len(model_names) - 1:
-                ax.set_xlabel('Predicted label', fontsize=10)
-            if j == 0:
-                ax.set_ylabel('True label', fontsize=10)
-
-            # Rotate x tick labels
-            plt.setp(ax.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")
-
-            # Loop over data dimensions and create text annotations
-            thresh = cm.max() / 2.
-            for i_cm in range(cm.shape[0]):
-                for j_cm in range(cm.shape[1]):
-                    ax.text(j_cm, i_cm, f'{cm[i_cm, j_cm]:.1f}%',
-                            ha="center", va="center",
-                            color="white" if cm[i_cm, j_cm] > thresh else "black",
-                            fontsize=10)
-
-    # Add colorbar
-    fig.colorbar(im, ax=axes.ravel().tolist())
-
-    # Adjust layout
-    plt.tight_layout()
-
-    # Save figure if output directory and filename are provided
-    if output_dir is not None and save_filename_prefix is not None:
-        os.makedirs(output_dir, exist_ok=True)
-        save_path = os.path.join(output_dir, f'{save_filename_prefix}_all.png')
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Figure saved to {save_path}")
-
-    # Also create individual plots
-    figures = {}
-    for signal_type in signal_types:
-        figures[signal_type] = {}
-        for model_name in model_names:
-            # Get true and predicted labels
-            y_true = results[signal_type][model_name]['y_true']
-            y_pred = results[signal_type][model_name]['y_pred']
-
-            # Create individual plot
-            title = f'{title_prefix} - {model_name} - {signal_type}'
-            save_filename = f'{save_filename_prefix}_{model_name}_{signal_type}.png'
-            figures[signal_type][model_name] = plot_confusion_matrix(
-                y_true, y_pred, classes, title=title, normalize=True,
-                output_dir=output_dir, save_filename=save_filename
-            )
-
-    return figures
-
-
-def plot_radar_chart(results: Dict[str, Dict[str, Dict[str, float]]],
-                     metrics: List[str] = ['accuracy', 'precision', 'recall', 'f1_score'],
-                     title: str = 'Model Performance Radar Chart',
-                     output_dir: Optional[str] = None,
-                     save_filename: Optional[str] = None,
-                     figsize: Tuple[int, int] = (20, 15)) -> plt.Figure:
-    """
-    Plot radar chart of model performance across different metrics and signal types.
-
-    Parameters
-    ----------
-    results : Dict[str, Dict[str, Dict[str, float]]]
-        Nested dictionary with structure {signal_type: {model_name: {metric: value}}}
-    metrics : List[str], optional
-        List of metrics to include in the radar chart
-    title : str, optional
-        Title of the plot
-    output_dir : str, optional
-        Directory to save the plot
-    save_filename : str, optional
-        Filename to save the plot
-    figsize : Tuple[int, int], optional
-        Figure size
-
-    Returns
-    -------
-    plt.Figure
-        Matplotlib figure object
-    """
-    # Extract signal types and model names
-    signal_types = list(results.keys())
-    model_names = list(results[signal_types[0]].keys())
-
-    # Create a figure with subplots for each signal type
-    fig, axes = plt.subplots(1, len(signal_types), figsize=figsize, subplot_kw=dict(polar=True))
-
-    # Make sure axes is a list
-    if len(signal_types) == 1:
-        axes = [axes]
-
-    # Number of metrics
-    num_metrics = len(metrics)
-
-    # Angles for each metric
-    angles = np.linspace(0, 2 * np.pi, num_metrics, endpoint=False).tolist()
-    # Close the polygon
-    angles += angles[:1]
-
-    # Plot radar chart for each signal type
-    for i, (signal_type, ax) in enumerate(zip(signal_types, axes)):
-        # Set title
-        ax.set_title(f'{signal_type}', fontsize=16)
-
-        # Set labels
-        ax.set_xticks(angles[:-1])
-        ax.set_xticklabels([metric.capitalize() for metric in metrics], fontsize=12)
-
-        # Set y-ticks
-        ax.set_yticks([0.2, 0.4, 0.6, 0.8, 1.0])
-        ax.set_yticklabels(['0.2', '0.4', '0.6', '0.8', '1.0'], fontsize=10)
-        ax.set_ylim(0, 1)
-
-        # Plot each model
-        for model_name in model_names:
-            # Extract metric values
-            values = [results[signal_type][model_name][metric] for metric in metrics]
-            # Close the polygon
-            values += values[:1]
-
-            # Plot
-            ax.plot(angles, values, linewidth=2, label=model_name)
-            ax.fill(angles, values, alpha=0.1)
-
-    # Add legend to the right of the figure
-    fig.legend(loc='upper center', bbox_to_anchor=(0.5, 0), ncol=len(model_names), fontsize=12)
-
-    # Adjust layout
-    plt.tight_layout()
-
-    # Save figure if output directory and filename are provided
-    if output_dir is not None and save_filename is not None:
-        os.makedirs(output_dir, exist_ok=True)
-        save_path = os.path.join(output_dir, save_filename)
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Figure saved to {save_path}")
-
-    return fig

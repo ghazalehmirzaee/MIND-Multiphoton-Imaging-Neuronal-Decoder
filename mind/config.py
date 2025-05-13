@@ -1,0 +1,120 @@
+"""
+Central configuration for the MIND project.
+"""
+
+DEFAULT_CONFIG = {
+    # Data parameters
+    "data": {
+        "window_size": 15,
+        "step_size": 1,
+        "test_size": 0.15,
+        "val_size": 0.15,
+        "batch_size": 32,
+        "num_workers": 4,
+        "binary_classification": True,
+        "mat_file": "data/raw/SFL13_5_8112021_002_new.mat",
+        "xlsx_file": "data/raw/SFL13_5_8112021_002_new.xlsx"
+    },
+
+    # Model parameters
+    "models": {
+        "random_forest": {
+            "n_estimators": 300,
+            "max_depth": 30,
+            "min_samples_split": 5,
+            "min_samples_leaf": 2,
+            "max_features": "sqrt",
+            "class_weight": "balanced",
+            "n_jobs": -1,
+            "random_state": 42
+        },
+        "svm": {
+            "C": 1.0,
+            "kernel": "rbf",
+            "gamma": "scale",
+            "class_weight": "balanced",
+            "probability": True,
+            "random_state": 42,
+            "n_components": 0.95,
+            "use_pca": True
+        },
+        "mlp": {
+            "hidden_layer_sizes": (64, 128, 32),
+            "activation": "relu",
+            "solver": "adam",
+            "alpha": 0.0001,
+            "batch_size": "auto",
+            "learning_rate": "adaptive",
+            "learning_rate_init": 0.001,
+            "max_iter": 200,
+            "early_stopping": True,
+            "validation_fraction": 0.1,
+            "n_iter_no_change": 10,
+            "random_state": 42
+        },
+        "fcnn": {
+            "hidden_dims": [256, 128, 64],
+            "output_dim": 2,
+            "dropout_rate": 0.4,
+            "learning_rate": 0.001,
+            "weight_decay": 1e-5,
+            "batch_size": 32,
+            "num_epochs": 100,
+            "patience": 15,
+            "random_state": 42
+        },
+        "cnn": {
+            "n_filters": [64, 128, 256],
+            "kernel_size": 3,
+            "output_dim": 2,
+            "dropout_rate": 0.3,
+            "learning_rate": 0.001,
+            "weight_decay": 1e-5,
+            "batch_size": 32,
+            "num_epochs": 100,
+            "patience": 15,
+            "random_state": 42,
+            "use_focal_loss": True
+        }
+    },
+
+    # Training parameters
+    "training": {
+        "optimize_hyperparams": False,
+        "device": "cuda",  # or "cpu" if CUDA not available
+        "output_dir": "outputs/results"
+    },
+
+    # W&B parameters
+    "wandb": {
+        "use_wandb": True,
+        "project_name": "mind-calcium-imaging",
+        "entity": None  # Set to your W&B username or team
+    },
+
+    # Visualization parameters
+    "visualization": {
+        "output_dir": "outputs/figures",
+        "dpi": 300,
+        "format": "png"
+    }
+}
+
+
+def get_config():
+    """
+    Get default configuration.
+
+    Returns
+    -------
+    dict
+        Default configuration
+    """
+    import torch
+
+    # Update device based on CUDA availability
+    if not torch.cuda.is_available() and DEFAULT_CONFIG["training"]["device"] == "cuda":
+        DEFAULT_CONFIG["training"]["device"] = "cpu"
+
+    return DEFAULT_CONFIG
+

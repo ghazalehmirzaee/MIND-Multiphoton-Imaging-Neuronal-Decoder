@@ -98,27 +98,10 @@ def load_behavioral_data(xlsx_file_path: str) -> pd.DataFrame:
         # Load the Excel file
         behavior_data = pd.read_excel(xlsx_file_path)
 
-        # Basic validation: Check if key columns exist
-        required_columns = ['foot', 'event_start_frame', 'event_end_frame']
-        missing_columns = [col for col in required_columns if col not in behavior_data.columns]
+        # Check if the expected columns exist
+        expected_columns = ['Foot (L/R)', 'Frame Start', 'Frame End']
+        missing_columns = [col for col in expected_columns if col not in behavior_data.columns]
 
-        if missing_columns:
-            # Try some common alternate column names
-            alternates = {
-                'foot': ['Foot', 'paw', 'Paw', 'limb', 'Limb'],
-                'event_start_frame': ['Start Frame', 'start_frame', 'StartFrame', 'frame_start'],
-                'event_end_frame': ['End Frame', 'end_frame', 'EndFrame', 'frame_end']
-            }
-
-            for missing_col in missing_columns:
-                for alt in alternates.get(missing_col, []):
-                    if alt in behavior_data.columns:
-                        behavior_data[missing_col] = behavior_data[alt]
-                        logger.info(f"Using column '{alt}' for '{missing_col}'")
-                        break
-
-        # Check again if any required columns are still missing
-        missing_columns = [col for col in required_columns if col not in behavior_data.columns]
         if missing_columns:
             logger.error(f"Missing required columns in {xlsx_file_path}: {missing_columns}")
             raise ValueError(f"Missing required columns: {missing_columns}")
@@ -159,10 +142,10 @@ def match_behavior_to_frames(behavior_data: pd.DataFrame, num_frames: int,
     try:
         # Map footstep events to frames
         for _, row in behavior_data.iterrows():
-            # Check if the foot column contains information about left/right
-            foot = str(row['foot']).lower()
-            start_frame = int(row['event_start_frame'])
-            end_frame = int(row['event_end_frame'])
+            # Get the foot side, start frame and end frame using the actual column names
+            foot = str(row['Foot (L/R)']).lower()
+            start_frame = int(row['Frame Start'])
+            end_frame = int(row['Frame End'])
 
             # Ensure frames are within the valid range
             start_frame = max(0, min(start_frame, num_frames - 1))
@@ -233,4 +216,5 @@ def load_and_align_data(mat_file_path: str, xlsx_file_path: str,
     frame_labels = match_behavior_to_frames(behavior_data, num_frames, binary_classification)
 
     return calcium_signals, frame_labels
+
 
