@@ -1,256 +1,148 @@
-"""Script to visualize results from model comparison with Hydra configuration."""
+# experiments/visualize_results.py
 import os
-import json
-import logging
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-import wandb
-from typing import Dict, Any, List, Optional
-from datetime import datetime
+from typing import Dict, List, Optional, Tuple, Any
 import hydra
-from hydra.utils import instantiate
+from hydra.utils import to_absolute_path
 from omegaconf import DictConfig, OmegaConf
+import json
+import logging
 
-from mind.data.loader import load_processed_data
-from mind.utils.logging import setup_logging
-from mind.utils.experiment_tracking import init_wandb
-from mind.visualization.performance import (
-    plot_performance_comparison,
-    plot_signal_type_comparison,
-    plot_model_comparison,
-    plot_binary_confusion_matrices,
-    plot_binary_roc_curves,
-    create_comparative_performance_grid,
-    plot_performance_radar,
-    plot_cross_signal_comparison
+# Import custom modules
+from mind.data.loader import load_dataset
+from mind.visualization.signal_visualization import (
+    visualize_signals, visualize_signal_comparison, visualize_signals_heatmap
 )
-from mind.visualization.feature_importance import (
-    analyze_feature_importance,
-    plot_comparative_feature_importance
-)
-from mind.visualization.signal_visualization import create_signal_visualizations
-from mind.evaluation.metrics import generate_metrics_report
-
-
-def load_results(file_path: str) -> Dict[str, Any]:
-    """
-    Load results from JSON file.
-
-    Parameters
-    ----------
-    file_path : str
-        Path to the results JSON file
-
-    Returns
-    -------
-    Dict[str, Any]
-        Loaded results dictionary
-    """
-    with open(file_path, 'r') as f:
-        results = json.load(f)
-    return results
 
 
 @hydra.main(config_path="../mind/config", config_name="default")
 def main(cfg: DictConfig) -> None:
     """
-    Main function to visualize model comparison results with Hydra configuration.
+    Script to visualize results from the model comparison experiment.
 
     Parameters
     ----------
     cfg : DictConfig
-        Hydra configuration object
+        Hydra configuration
     """
-    # Access the working directory (set by Hydra)
-    work_dir = os.getcwd()
-
-    # Setup logging
-    log_file = os.path.join(work_dir, 'logs', f'visualize_results_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log')
-    setup_logging(log_file=log_file)
+    # Set up logging
+    logging.basicConfig(level=logging.INFO,
+                        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     logger = logging.getLogger(__name__)
-    logger.info("Starting results visualization with Hydra configuration")
 
-    # Initialize W&B
-    wandb_run = init_wandb(
-        project_name=cfg.wandb.project,
-        experiment_name=cfg.experiment.name or 'results_visualization',
-        config=cfg
-    )
+    # Print configuration
+    logger.info(f"Configuration:\n{OmegaConf.to_yaml(cfg)}")
 
-    # Set plotting style
-    plt.style.use(cfg.visualization.style)
-
-    # Load data
-    logger.info(f"Loading data from {cfg.data.matlab_file}")
-    data = load_processed_data(cfg.data.matlab_file)
+    # Convert relative paths to absolute paths
+    neural_path = to_absolute_path(cfg.data.neural_path)
+    behavior_path = to_absolute_path(cfg.data.behavior_path)
+    output_dir = to_absolute_path(cfg.output.dir)
+    viz_dir = to_absolute_path(cfg.output.viz_dir)
+    os.makedirs(viz_dir, exist_ok=True)
 
     # Load results
-    classical_results_path = os.path.join(cfg.experiment.output_dir, 'metrics', 'classical_ml_results.json')
-    deep_results_path = os.path.join(cfg.experiment.output_dir, 'metrics', 'deep_learning_results.json')
+    results_path = os.path.join(output_dir, "performance_metrics.json")
+    if os.path.exists(results_path):
+        with open(results_path, 'r') as f:
+            results = json.load(f)
+        logger.info(f"Loaded results from {results_path}")
+    else:
+        logger.error(f"Results file not found: {results_path}")
+        results = {}
 
-    logger.info(f"Loading classical ML results from {classical_results_path}")
-    classical_results = load_results(classical_results_path)
+    # Create visualizations
+    if results:
+        # Create bar plots for each metric
+        metrics = ['accuracy', 'precision', 'recall', 'f1_score']
+        signal_types = list(results.keys())
+        model_names = list(results[signal_types[0]].keys())
 
-    logger.info(f"Loading deep learning results from {deep_results_path}")
-    deep_results = load_results(deep_results_path)
+        for metric in metrics:
+            fig, ax = plt.subplots(figsize=(12, 8))
 
-    # Create output directories
-    figures_dir = os.path.join(work_dir, 'figures')
-    metrics_dir = os.path.join(work_dir, 'metrics')
-    os.makedirs(figures_dir, exist_ok=True)
-    os.makedirs(metrics_dir, exist_ok=True)
+            # Prepare data for plotting
+            metric_data = []
+            for signal_type in signal_types:
+                for model_name in model_names:
+                    metric_data.append({
+                        'Signal Type': signal_type,
+                        'Model': model_name,
+                        metric.capitalize(): results[signal_type][model_name][metric]
+                    })
+            df = pd.DataFrame(metric_data)
 
-    # Combine results
-    all_results = {}
+            # Plot grouped bar chart
+            sns.barplot(x='Model', y=metric.capitalize(), hue='Signal Type', data=df, ax=ax)
 
-    if 'test_results' in classical_results:
-        all_results.update(classical_results['test_results'])
+            # Set labels and title
+            ax.set_title(f'Model {metric.capitalize()} Comparison', fontsize=16)
+            ax.set_xlabel('Model', fontsize=14)
+            ax.set_ylabel(metric.capitalize(), fontsize=14)
 
-    if 'test_results' in deep_results:
-        for signal_type, signal_results in deep_results['test_results'].items():
-            if signal_type not in all_results:
-                all_results[signal_type] = {}
+            # Adjust legend
+            ax.legend(title='Signal Type', fontsize=12)
 
-            all_results[signal_type].update(signal_results)
+            # Save figure
+            plt.tight_layout()
+            plt.savefig(os.path.join(viz_dir, f"model_{metric}_comparison.png"), dpi=300, bbox_inches='tight')
+            plt.close()
 
-    # Create performance visualizations
-    if all_results:
-        # Create DataFrame for performance comparison
-        rows = []
-        for signal_type, signal_results in all_results.items():
-            for model_type, metrics in signal_results.items():
-                row = {
-                    'Signal Type': signal_type,
-                    'Model': model_type,
-                    'Accuracy': metrics['accuracy'],
-                    'Precision (Macro)': metrics['precision_macro'],
-                    'Recall (Macro)': metrics['recall_macro'],
-                    'F1 (Macro)': metrics['f1_macro']
-                }
-                rows.append(row)
+        # Create heatmap of all metrics
+        for signal_type in signal_types:
+            fig, ax = plt.subplots(figsize=(10, 8))
 
-        performance_df = pd.DataFrame(rows)
+            # Prepare data for heatmap
+            heatmap_data = []
+            for model_name in model_names:
+                model_metrics = results[signal_type][model_name]
+                heatmap_data.append([
+                    model_metrics[metric] for metric in metrics
+                ])
 
-        # Plot performance comparison
-        fig = plot_performance_comparison(
-            performance_df,
-            output_file=os.path.join(figures_dir, 'performance_comparison.png')
-        )
-        if wandb_run:
-            wandb_run.log({"performance_comparison": wandb.Image(fig)})
+            # Create heatmap
+            sns.heatmap(heatmap_data, annot=True, fmt=".3f", cmap="YlGnBu",
+                        xticklabels=[m.capitalize() for m in metrics],
+                        yticklabels=model_names, ax=ax)
 
-        # Plot signal type comparison
-        fig = plot_signal_type_comparison(
-            performance_df,
-            output_file=os.path.join(figures_dir, 'signal_type_comparison.png')
-        )
-        if wandb_run:
-            wandb_run.log({"signal_type_comparison": wandb.Image(fig)})
+            # Set title
+            ax.set_title(f'Performance Metrics Heatmap - {signal_type}', fontsize=16)
 
-        # Plot model comparison
-        fig = plot_model_comparison(
-            performance_df,
-            output_file=os.path.join(figures_dir, 'model_comparison.png')
-        )
-        if wandb_run:
-            wandb_run.log({"model_comparison": wandb.Image(fig)})
+            # Save figure
+            plt.tight_layout()
+            plt.savefig(os.path.join(viz_dir, f"metrics_heatmap_{signal_type}.png"), dpi=300, bbox_inches='tight')
+            plt.close()
 
-        # Plot binary confusion matrices
-        cm_figure = plot_binary_confusion_matrices(
-            all_results,
-            output_dir=figures_dir
-        )
-        if wandb_run:
-            wandb_run.log({"binary_confusion_matrices": wandb.Image(cm_figure)})
+    # Create additional signal visualizations
+    logger.info("Creating signal visualizations...")
 
-        # Plot binary ROC curves
-        roc_figures = plot_binary_roc_curves(
-            all_results,
-            output_dir=figures_dir
-        )
-        if wandb_run:
-            for name, fig in roc_figures.items():
-                wandb_run.log({name: wandb.Image(fig)})
+    # Load data
+    data = load_dataset(neural_path, behavior_path, cfg.data.binary_task)
 
-        # Create comparative performance grid
-        fig = create_comparative_performance_grid(
-            all_results,
-            output_file=os.path.join(figures_dir, 'comparative_performance_grid.png')
-        )
-        if wandb_run:
-            wandb_run.log({"comparative_performance_grid": wandb.Image(fig)})
+    # Visualize signals
+    visualize_signals(data,
+                      num_neurons=cfg.visualization.signals.num_neurons,
+                      output_dir=viz_dir,
+                      save_filename="raw_signals_detailed.png",
+                      figsize=(25, 20))
 
-        # Plot performance radar
-        fig = plot_performance_radar(
-            all_results,
-            output_file=os.path.join(figures_dir, 'performance_radar.png')
-        )
-        if wandb_run:
-            wandb_run.log({"performance_radar": wandb.Image(fig)})
+    # Visualize signal comparison with more neurons
+    visualize_signal_comparison(data,
+                                num_neurons=10,
+                                output_dir=viz_dir,
+                                save_filename="signal_comparison_detailed.png",
+                                figsize=(25, 20))
 
-        # Plot cross-signal comparison
-        fig = plot_cross_signal_comparison(
-            all_results,
-            output_file=os.path.join(figures_dir, 'cross_signal_comparison.png')
-        )
-        if wandb_run:
-            wandb_run.log({"cross_signal_comparison": wandb.Image(fig)})
+    # Visualize heatmap with more neurons
+    visualize_signals_heatmap(data,
+                              num_neurons=250,
+                              output_dir=viz_dir,
+                              save_filename="signals_heatmap_detailed.png",
+                              figsize=(25, 20))
 
-        # Generate metrics report
-        metrics_report = generate_metrics_report(
-            all_results,
-            output_file=os.path.join(metrics_dir, 'metrics_report.json')
-        )
-        logger.info(f"Generated metrics report saved to {os.path.join(metrics_dir, 'metrics_report.json')}")
-
-    # Feature importance visualizations
-    if 'feature_importance' in classical_results:
-        # Analyze feature importance
-        fi_analysis = analyze_feature_importance(
-            classical_results['feature_importance'],
-            data['window_size'],
-            {
-                'calcium': data['n_calcium_neurons'],
-                'deltaf': data['n_deltaf_neurons'],
-                'deconv': data['n_deconv_neurons']
-            },
-            output_dir=figures_dir
-        )
-
-        # Log figures to W&B
-        if wandb_run:
-            for name, fig in fi_analysis['figures'].items():
-                wandb_run.log({name: wandb.Image(fig)})
-
-        # Create comparative feature importance visualizations
-        fi_figures = plot_comparative_feature_importance(
-            classical_results['feature_importance'],
-            output_dir=figures_dir
-        )
-
-        # Log figures to W&B
-        if wandb_run:
-            for name, fig in fi_figures.items():
-                wandb_run.log({name: wandb.Image(fig)})
-
-    # Signal visualizations
-    signal_figures = create_signal_visualizations(
-        data,
-        output_dir=figures_dir
-    )
-
-    # Log figures to W&B
-    if wandb_run:
-        for name, fig in signal_figures.items():
-            wandb_run.log({name: wandb.Image(fig)})
-
-    # Finish W&B run
-    if wandb_run:
-        wandb_run.finish()
-
-    logger.info("Results visualization completed successfully.")
+    logger.info("Visualization complete.")
 
 
 if __name__ == "__main__":
