@@ -1,370 +1,577 @@
+# # mind/visualization/feature_importance.py
+# """
+# Feature importance visualization module with consistent styling.
+# Creates heatmaps, temporal importance plots, and neuron importance visualizations.
+# """
+# import numpy as np
+# import matplotlib.pyplot as plt
+# import seaborn as sns
+# from pathlib import Path
+# from typing import Dict, Optional, Any
+# import logging
+#
+# from .config import (SIGNAL_COLORS, SIGNAL_DISPLAY_NAMES, MODEL_DISPLAY_NAMES,
+#                      set_publication_style, get_signal_colormap, SIGNAL_GRADIENTS,
+#                      FIGURE_SIZES)
+#
+# logger = logging.getLogger(__name__)
+#
+#
+# def plot_feature_importance_heatmaps(
+#         results: Dict[str, Dict[str, Any]],
+#         output_dir: Optional[Path] = None
+# ) -> plt.Figure:
+#     """
+#     Create feature importance heatmaps for each signal type.
+#
+#     Shows relative importance of neurons (x-axis) across time steps (y-axis)
+#     using consistent color coding for each signal type.
+#
+#     Parameters
+#     ----------
+#     results : Dict[str, Dict[str, Any]]
+#         Results dictionary organized by model and signal type
+#     output_dir : Optional[Path]
+#         Directory to save the figure
+#
+#     Returns
+#     -------
+#     plt.Figure
+#         The created figure
+#     """
+#     set_publication_style()
+#
+#     signals = ['calcium_signal', 'deltaf_signal', 'deconv_signal']
+#
+#     fig, axes = plt.subplots(1, 3, figsize=FIGURE_SIZES['grid_1x3'])
+#
+#     for j, signal in enumerate(signals):
+#         ax = axes[j]
+#
+#         # Use Random Forest importance as it's most reliable
+#         try:
+#             importance_summary = results['random_forest'][signal]['importance_summary']
+#             importance_matrix = np.array(importance_summary['importance_matrix'])
+#
+#             # Create custom colormap for this signal type
+#             cmap = get_signal_colormap(signal)
+#
+#             # Plot heatmap with neurons on x-axis and time steps on y-axis
+#             im = ax.imshow(importance_matrix, aspect='auto', cmap=cmap)
+#
+#             ax.set_xlabel('Neuron', fontsize=12)
+#             ax.set_ylabel('Time Step', fontsize=12)
+#
+#             # Set title with signal color
+#             signal_color = SIGNAL_COLORS[signal]
+#             ax.set_title(f'{SIGNAL_DISPLAY_NAMES[signal]} - Feature Importance',
+#                          fontsize=14, fontweight='bold', color=signal_color)
+#
+#             # Add colorbar
+#             cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+#             cbar.set_label('Importance', fontsize=10)
+#
+#             # Add colored border
+#             for spine in ax.spines.values():
+#                 spine.set_edgecolor(signal_color)
+#                 spine.set_linewidth(2)
+#
+#             # Adjust neuron labels to avoid crowding
+#             n_neurons = importance_matrix.shape[1]
+#             if n_neurons > 50:
+#                 # Show every 10th neuron label
+#                 neuron_ticks = np.arange(0, n_neurons, 10)
+#                 ax.set_xticks(neuron_ticks)
+#                 ax.set_xticklabels(neuron_ticks)
+#
+#         except (KeyError, TypeError, ValueError):
+#             ax.text(0.5, 0.5, 'No importance data',
+#                     ha='center', va='center', transform=ax.transAxes)
+#             ax.set_xticks([])
+#             ax.set_yticks([])
+#
+#     fig.suptitle('Feature Importance Heatmaps', fontsize=16, fontweight='bold')
+#
+#     if output_dir:
+#         output_path = Path(output_dir) / 'feature_importance_heatmaps.png'
+#         fig.savefig(output_path, dpi=300, bbox_inches='tight')
+#         logger.info(f"Saved feature importance heatmaps to {output_path}")
+#
+#     return fig
+#
+#
+# def plot_temporal_importance_patterns(
+#         results: Dict[str, Dict[str, Any]],
+#         output_dir: Optional[Path] = None
+# ) -> plt.Figure:
+#     """
+#     Create temporal importance bar plots for each signal type.
+#
+#     Shows the average importance across all neurons for each time step,
+#     using consistent color coding for each signal type.
+#
+#     Parameters
+#     ----------
+#     results : Dict[str, Dict[str, Any]]
+#         Results dictionary organized by model and signal type
+#     output_dir : Optional[Path]
+#         Directory to save the figure
+#
+#     Returns
+#     -------
+#     plt.Figure
+#         The created figure
+#     """
+#     set_publication_style()
+#
+#     signals = ['calcium_signal', 'deltaf_signal', 'deconv_signal']
+#
+#     fig, axes = plt.subplots(1, 3, figsize=FIGURE_SIZES['grid_1x3'])
+#
+#     for j, signal in enumerate(signals):
+#         ax = axes[j]
+#
+#         try:
+#             importance_summary = results['random_forest'][signal]['importance_summary']
+#             temporal_importance = np.array(importance_summary['temporal_importance'])
+#
+#             # Get signal color
+#             signal_color = SIGNAL_COLORS[signal]
+#             gradient = SIGNAL_GRADIENTS[signal]
+#
+#             # Create bars with gradient effect
+#             bars = ax.bar(range(len(temporal_importance)), temporal_importance)
+#
+#             # Apply gradient coloring to bars
+#             for i, bar in enumerate(bars):
+#                 # Gradient intensity based on importance value
+#                 intensity = temporal_importance[i] / temporal_importance.max()
+#                 color_idx = min(int(intensity * (len(gradient) - 1)), len(gradient) - 1)
+#                 bar.set_color(gradient[color_idx])
+#                 bar.set_edgecolor(signal_color)
+#                 bar.set_linewidth(0.5)
+#
+#             ax.set_xlabel('Time Step', fontsize=12)
+#             ax.set_ylabel('Mean Feature Importance', fontsize=12)
+#             ax.set_title(f'{SIGNAL_DISPLAY_NAMES[signal]}',
+#                          fontsize=14, fontweight='bold', color=signal_color)
+#             ax.grid(True, alpha=0.3, axis='y')
+#
+#             # Style improvements
+#             ax.spines['top'].set_visible(False)
+#             ax.spines['right'].set_visible(False)
+#             ax.spines['left'].set_color(signal_color)
+#             ax.spines['left'].set_linewidth(2)
+#
+#             # Set y-axis limits for consistency
+#             ax.set_ylim(0, temporal_importance.max() * 1.1)
+#
+#         except (KeyError, TypeError, ValueError):
+#             ax.text(0.5, 0.5, 'No temporal data',
+#                     ha='center', va='center', transform=ax.transAxes)
+#             ax.set_xticks([])
+#             ax.set_yticks([])
+#
+#     fig.suptitle('Temporal Importance Patterns', fontsize=16, fontweight='bold')
+#
+#     if output_dir:
+#         output_path = Path(output_dir) / 'temporal_importance_patterns.png'
+#         fig.savefig(output_path, dpi=300, bbox_inches='tight')
+#         logger.info(f"Saved temporal importance patterns to {output_path}")
+#
+#     return fig
+#
+#
+# def plot_top_neuron_importance(
+#         results: Dict[str, Dict[str, Any]],
+#         output_dir: Optional[Path] = None
+# ) -> plt.Figure:
+#     """
+#     Create bar plots showing top 20 neuron importance for each signal type.
+#
+#     Shows the mean importance of the top 20 neurons using consistent color
+#     coding for each signal type.
+#
+#     Parameters
+#     ----------
+#     results : Dict[str, Dict[str, Any]]
+#         Results dictionary organized by model and signal type
+#     output_dir : Optional[Path]
+#         Directory to save the figure
+#
+#     Returns
+#     -------
+#     plt.Figure
+#         The created figure
+#     """
+#     set_publication_style()
+#
+#     signals = ['calcium_signal', 'deltaf_signal', 'deconv_signal']
+#
+#     fig, axes = plt.subplots(1, 3, figsize=FIGURE_SIZES['grid_1x3'])
+#
+#     for j, signal in enumerate(signals):
+#         ax = axes[j]
+#
+#         try:
+#             importance_summary = results['random_forest'][signal]['importance_summary']
+#             neuron_importance = np.array(importance_summary['neuron_importance'])
+#             top_indices = np.array(importance_summary['top_neuron_indices'])[:20]
+#
+#             # Get importance values for top neurons
+#             top_importance = neuron_importance[top_indices]
+#
+#             # Get signal color and gradient
+#             signal_color = SIGNAL_COLORS[signal]
+#             gradient = SIGNAL_GRADIENTS[signal]
+#
+#             # Create bars with gradient effect
+#             bars = ax.bar(range(len(top_importance)), top_importance)
+#
+#             # Apply gradient coloring to bars
+#             for i, bar in enumerate(bars):
+#                 # Gradient intensity based on importance value
+#                 intensity = top_importance[i] / top_importance.max()
+#                 color_idx = min(int(intensity * (len(gradient) - 1)), len(gradient) - 1)
+#                 bar.set_color(gradient[color_idx])
+#                 bar.set_edgecolor(signal_color)
+#                 bar.set_linewidth(0.5)
+#
+#             ax.set_xlabel('Neuron Rank', fontsize=12)
+#             ax.set_ylabel('Mean Feature Importance', fontsize=12)
+#             ax.set_title(f'{SIGNAL_DISPLAY_NAMES[signal]} - Top 20 Neurons',
+#                          fontsize=14, fontweight='bold', color=signal_color)
+#
+#             # Set x-ticks to show neuron indices
+#             ax.set_xticks(range(0, 20, 5))
+#             ax.set_xticklabels([f'N{top_indices[i]}' for i in range(0, 20, 5)])
+#
+#             ax.grid(True, alpha=0.3, axis='y')
+#
+#             # Style improvements
+#             ax.spines['top'].set_visible(False)
+#             ax.spines['right'].set_visible(False)
+#             ax.spines['left'].set_color(signal_color)
+#             ax.spines['left'].set_linewidth(2)
+#
+#         except (KeyError, TypeError, ValueError):
+#             ax.text(0.5, 0.5, 'No neuron data',
+#                     ha='center', va='center', transform=ax.transAxes)
+#             ax.set_xticks([])
+#             ax.set_yticks([])
+#
+#     fig.suptitle('Top 20 Neuron Importance', fontsize=16, fontweight='bold')
+#
+#     if output_dir:
+#         output_path = Path(output_dir) / 'top_neuron_importance.png'
+#         fig.savefig(output_path, dpi=300, bbox_inches='tight')
+#         logger.info(f"Saved top neuron importance to {output_path}")
+#
+#     return fig
+#
+
+
+# mind/visualization/feature_importance.py
 """
-Feature importance visualization utilities for neural decoding models.
+Feature importance visualization module with consistent styling.
+Creates heatmaps, temporal importance plots, and neuron importance visualizations.
 """
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union, Any
+from typing import Dict, Optional, Any
 import logging
+
+from .config import (SIGNAL_COLORS, SIGNAL_DISPLAY_NAMES, MODEL_DISPLAY_NAMES,
+                     set_publication_style, get_signal_colormap, SIGNAL_GRADIENTS,
+                     FIGURE_SIZES)
 
 logger = logging.getLogger(__name__)
 
 
-def plot_temporal_importance(importance_matrix: np.ndarray,
-                             model_name: str,
-                             signal_name: str,
-                             output_dir: Optional[Union[str, Path]] = None,
-                             fig_size: Tuple[int, int] = (10, 6)) -> plt.Figure:
+def plot_feature_importance_heatmaps(
+        results: Dict[str, Dict[str, Any]],
+        output_dir: Optional[Path] = None
+) -> plt.Figure:
     """
-    Plot temporal importance pattern.
+    Create feature importance heatmaps for each signal type.
+
+    Shows relative importance of neurons (x-axis) across time steps (y-axis)
+    using consistent color coding for each signal type.
 
     Parameters
     ----------
-    importance_matrix : np.ndarray
-        Feature importance matrix, shape (window_size, n_neurons)
-    model_name : str
-        Name of the model
-    signal_name : str
-        Name of the signal type
-    output_dir : Optional[Union[str, Path]], optional
-        Directory to save the figure, by default None
-    fig_size : Tuple[int, int], optional
-        Figure size, by default (10, 6)
+    results : Dict[str, Dict[str, Any]]
+        Results dictionary organized by model and signal type
+    output_dir : Optional[Path]
+        Directory to save the figure
 
     Returns
     -------
     plt.Figure
-        The figure object
+        The created figure
     """
-    logger.info(f"Plotting temporal importance for {model_name} on {signal_name}")
+    set_publication_style()
 
-    # Calculate temporal importance by averaging across neurons
-    temporal_importance = np.mean(importance_matrix, axis=1)
+    signals = ['calcium_signal', 'deltaf_signal', 'deconv_signal']
 
-    # Normalize temporal importance
-    if temporal_importance.sum() > 0:
-        temporal_importance = temporal_importance / temporal_importance.sum()
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
 
-    # Create figure
-    fig, ax = plt.subplots(figsize=fig_size)
+    for j, signal in enumerate(signals):
+        ax = axes[j]
 
-    # Plot temporal importance
-    ax.bar(range(len(temporal_importance)), temporal_importance)
+        # Use Random Forest importance as it's most reliable
+        try:
+            importance_summary = results['random_forest'][signal]['importance_summary']
+            importance_matrix = np.array(importance_summary['importance_matrix'])
 
-    # Set labels
-    ax.set_xlabel("Time Step")
-    ax.set_ylabel("Importance")
-    ax.set_title(f"Temporal Importance - {model_name} - {signal_name}")
+            # Create custom colormap for this signal type
+            cmap = get_signal_colormap(signal)
 
-    # Save figure if output directory is provided
-    if output_dir is not None:
-        output_dir = Path(output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
+            # Create the heatmap with enhanced styling
+            from matplotlib import ticker
 
-        fig.savefig(output_dir / f"temporal_importance_{model_name}_{signal_name}.png", dpi=300, bbox_inches='tight')
-        logger.info(
-            f"Saved temporal importance to {output_dir / f'temporal_importance_{model_name}_{signal_name}.png'}")
+            # Plot heatmap with neurons on x-axis and time steps on y-axis
+            im = ax.imshow(importance_matrix, aspect='auto', cmap=cmap,
+                           interpolation='nearest')
+
+            # Add thin grid lines for better academic look
+            ax.set_xticks(np.arange(-0.5, importance_matrix.shape[1], 1), minor=True)
+            ax.set_yticks(np.arange(-0.5, importance_matrix.shape[0], 1), minor=True)
+            ax.grid(which="minor", color="white", linestyle='-', linewidth=0.5)
+            ax.tick_params(which="minor", size=0)
+
+            # Set labels
+            ax.set_xlabel('Neuron', fontsize=12)
+            ax.set_ylabel('Time Step', fontsize=12)
+
+            # Set title with signal color
+            signal_color = SIGNAL_COLORS[signal]
+            ax.set_title(f'{SIGNAL_DISPLAY_NAMES[signal]} - Feature Importance',
+                         fontsize=14, fontweight='bold', color=signal_color)
+
+            # Add colorbar with proper formatting
+            cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+            cbar.set_label('Importance', fontsize=10)
+            cbar.ax.tick_params(labelsize=9)
+
+            # Format colorbar to show scientific notation if needed
+            cbar.formatter.set_powerlimits((0, 0))
+            cbar.update_ticks()
+
+            # Add colored border around the entire plot
+            for spine in ax.spines.values():
+                spine.set_edgecolor(signal_color)
+                spine.set_linewidth(2)
+
+            # Fix neuron labels to avoid crowding
+            n_neurons = importance_matrix.shape[1]
+            n_time_steps = importance_matrix.shape[0]
+
+            # Set major ticks for x-axis (neurons)
+            if n_neurons > 50:
+                # Show every 50th neuron
+                neuron_ticks = np.arange(0, n_neurons, 50)
+                ax.set_xticks(neuron_ticks)
+                ax.set_xticklabels(neuron_ticks, fontsize=9)
+            else:
+                # Show every 10th neuron
+                neuron_ticks = np.arange(0, n_neurons, 10)
+                ax.set_xticks(neuron_ticks)
+                ax.set_xticklabels(neuron_ticks, fontsize=9)
+
+            # Set major ticks for y-axis (time steps)
+            time_ticks = np.arange(0, n_time_steps, 2)
+            ax.set_yticks(time_ticks)
+            ax.set_yticklabels(time_ticks, fontsize=9)
+
+            # Remove tick marks
+            ax.tick_params(axis='both', which='major', length=0)
+
+        except (KeyError, TypeError, ValueError):
+            ax.text(0.5, 0.5, 'No importance data',
+                    ha='center', va='center', transform=ax.transAxes)
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+    fig.suptitle('Feature Importance Heatmaps', fontsize=16, fontweight='bold')
+    plt.tight_layout()
+
+    if output_dir:
+        output_path = Path(output_dir) / 'feature_importance_heatmaps.png'
+        fig.savefig(output_path, dpi=300, bbox_inches='tight')
+        logger.info(f"Saved feature importance heatmaps to {output_path}")
 
     return fig
 
 
-def plot_neuron_importance(importance_matrix: np.ndarray,
-                           top_neuron_indices: np.ndarray,
-                           model_name: str,
-                           signal_name: str,
-                           output_dir: Optional[Union[str, Path]] = None,
-                           n_top: int = 20,
-                           fig_size: Tuple[int, int] = (12, 6)) -> plt.Figure:
+def plot_temporal_importance_patterns(
+        results: Dict[str, Dict[str, Any]],
+        output_dir: Optional[Path] = None
+) -> plt.Figure:
     """
-    Plot neuron importance for top neurons.
+    Create temporal importance bar plots for each signal type.
+
+    Shows the average importance across all neurons for each time step,
+    using consistent color coding for each signal type.
 
     Parameters
     ----------
-    importance_matrix : np.ndarray
-        Feature importance matrix, shape (window_size, n_neurons)
-    top_neuron_indices : np.ndarray
-        Indices of top neurons, shape (n_top,)
-    model_name : str
-        Name of the model
-    signal_name : str
-        Name of the signal type
-    output_dir : Optional[Union[str, Path]], optional
-        Directory to save the figure, by default None
-    n_top : int, optional
-        Number of top neurons to plot, by default 20
-    fig_size : Tuple[int, int], optional
-        Figure size, by default (12, 6)
+    results : Dict[str, Dict[str, Any]]
+        Results dictionary organized by model and signal type
+    output_dir : Optional[Path]
+        Directory to save the figure
 
     Returns
     -------
     plt.Figure
-        The figure object
+        The created figure
     """
-    logger.info(f"Plotting neuron importance for {model_name} on {signal_name}")
+    set_publication_style()
 
-    # Calculate neuron importance by averaging across time steps
-    neuron_importance = np.mean(importance_matrix, axis=0)
+    signals = ['calcium_signal', 'deltaf_signal', 'deconv_signal']
 
-    # Normalize neuron importance
-    if neuron_importance.sum() > 0:
-        neuron_importance = neuron_importance / neuron_importance.sum()
+    fig, axes = plt.subplots(1, 3, figsize=FIGURE_SIZES['grid_1x3'])
 
-    # Get top neuron indices
-    n_top = min(n_top, len(top_neuron_indices))
-    top_indices = top_neuron_indices[:n_top]
+    for j, signal in enumerate(signals):
+        ax = axes[j]
 
-    # Get importance values for top neurons
-    top_importances = neuron_importance[top_indices]
+        try:
+            importance_summary = results['random_forest'][signal]['importance_summary']
+            temporal_importance = np.array(importance_summary['temporal_importance'])
 
-    # Create figure
-    fig, ax = plt.subplots(figsize=fig_size)
+            # Get signal color
+            signal_color = SIGNAL_COLORS[signal]
+            gradient = SIGNAL_GRADIENTS[signal]
 
-    # Create bar plot with colors based on importance
-    bars = ax.bar(range(n_top), top_importances)
+            # Create bars with gradient effect
+            bars = ax.bar(range(len(temporal_importance)), temporal_importance)
 
-    # Set colors based on importance
-    colors = plt.cm.viridis(top_importances / top_importances.max())
-    for bar, color in zip(bars, colors):
-        bar.set_color(color)
+            # Apply gradient coloring to bars
+            for i, bar in enumerate(bars):
+                # Gradient intensity based on importance value
+                intensity = temporal_importance[i] / temporal_importance.max()
+                color_idx = min(int(intensity * (len(gradient) - 1)), len(gradient) - 1)
+                bar.set_color(gradient[color_idx])
+                bar.set_edgecolor(signal_color)
+                bar.set_linewidth(0.5)
 
-    # Set labels
-    ax.set_xlabel("Neuron Rank")
-    ax.set_ylabel("Importance")
-    ax.set_title(f"Top {n_top} Neuron Importance - {model_name} - {signal_name}")
-    ax.set_xticks(range(n_top))
-    ax.set_xticklabels([f"N{idx}" for idx in top_indices], rotation=90)
+            ax.set_xlabel('Time Step', fontsize=12)
+            ax.set_ylabel('Mean Feature Importance', fontsize=12)
+            ax.set_title(f'{SIGNAL_DISPLAY_NAMES[signal]}',
+                         fontsize=14, fontweight='bold', color=signal_color)
+            ax.grid(True, alpha=0.3, axis='y')
 
-    # Save figure if output directory is provided
-    if output_dir is not None:
-        output_dir = Path(output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
+            # Style improvements
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['left'].set_color(signal_color)
+            ax.spines['left'].set_linewidth(2)
 
-        fig.savefig(output_dir / f"neuron_importance_{model_name}_{signal_name}.png", dpi=300, bbox_inches='tight')
-        logger.info(f"Saved neuron importance to {output_dir / f'neuron_importance_{model_name}_{signal_name}.png'}")
+            # Set y-axis limits for consistency
+            ax.set_ylim(0, temporal_importance.max() * 1.1)
+
+        except (KeyError, TypeError, ValueError):
+            ax.text(0.5, 0.5, 'No temporal data',
+                    ha='center', va='center', transform=ax.transAxes)
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+    fig.suptitle('Temporal Importance Patterns', fontsize=16, fontweight='bold')
+
+    if output_dir:
+        output_path = Path(output_dir) / 'temporal_importance_patterns.png'
+        fig.savefig(output_path, dpi=300, bbox_inches='tight')
+        logger.info(f"Saved temporal importance patterns to {output_path}")
 
     return fig
 
 
-def plot_importance_heatmap(importance_matrix: np.ndarray,
-                            model_name: str,
-                            signal_name: str,
-                            output_dir: Optional[Union[str, Path]] = None,
-                            fig_size: Tuple[int, int] = (12, 8)) -> plt.Figure:
+def plot_top_neuron_importance(
+        results: Dict[str, Dict[str, Any]],
+        output_dir: Optional[Path] = None
+) -> plt.Figure:
     """
-    Plot feature importance heatmap.
+    Create bar plots showing top 20 neuron importance for each signal type.
+
+    Shows the mean importance of the top 20 neurons using consistent color
+    coding for each signal type.
 
     Parameters
     ----------
-    importance_matrix : np.ndarray
-        Feature importance matrix, shape (window_size, n_neurons)
-    model_name : str
-        Name of the model
-    signal_name : str
-        Name of the signal type
-    output_dir : Optional[Union[str, Path]], optional
-        Directory to save the figure, by default None
-    fig_size : Tuple[int, int], optional
-        Figure size, by default (12, 8)
+    results : Dict[str, Dict[str, Any]]
+        Results dictionary organized by model and signal type
+    output_dir : Optional[Path]
+        Directory to save the figure
 
     Returns
     -------
     plt.Figure
-        The figure object
+        The created figure
     """
-    logger.info(f"Plotting importance heatmap for {model_name} on {signal_name}")
+    set_publication_style()
 
-    # Create figure
-    fig, ax = plt.subplots(figsize=fig_size)
+    signals = ['calcium_signal', 'deltaf_signal', 'deconv_signal']
 
-    # Plot heatmap
-    sns.heatmap(importance_matrix, cmap='viridis', cbar_kws={'label': 'Importance'}, ax=ax)
+    fig, axes = plt.subplots(1, 3, figsize=FIGURE_SIZES['grid_1x3'])
 
-    # Set labels
-    ax.set_xlabel("Neuron")
-    ax.set_ylabel("Time Step")
-    ax.set_title(f"Feature Importance Heatmap - {model_name} - {signal_name}")
+    for j, signal in enumerate(signals):
+        ax = axes[j]
 
-    # Save figure if output directory is provided
-    if output_dir is not None:
-        output_dir = Path(output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            importance_summary = results['random_forest'][signal]['importance_summary']
+            neuron_importance = np.array(importance_summary['neuron_importance'])
+            top_indices = np.array(importance_summary['top_neuron_indices'])[:20]
 
-        fig.savefig(output_dir / f"importance_heatmap_{model_name}_{signal_name}.png", dpi=300, bbox_inches='tight')
-        logger.info(f"Saved importance heatmap to {output_dir / f'importance_heatmap_{model_name}_{signal_name}.png'}")
+            # Get importance values for top neurons
+            top_importance = neuron_importance[top_indices]
+
+            # Get signal color and gradient
+            signal_color = SIGNAL_COLORS[signal]
+            gradient = SIGNAL_GRADIENTS[signal]
+
+            # Create bars with gradient effect
+            bars = ax.bar(range(len(top_importance)), top_importance)
+
+            # Apply gradient coloring to bars
+            for i, bar in enumerate(bars):
+                # Gradient intensity based on importance value
+                intensity = top_importance[i] / top_importance.max()
+                color_idx = min(int(intensity * (len(gradient) - 1)), len(gradient) - 1)
+                bar.set_color(gradient[color_idx])
+                bar.set_edgecolor(signal_color)
+                bar.set_linewidth(0.5)
+
+            ax.set_xlabel('Neuron Rank', fontsize=12)
+            ax.set_ylabel('Mean Feature Importance', fontsize=12)
+            ax.set_title(f'{SIGNAL_DISPLAY_NAMES[signal]} - Top 20 Neurons',
+                         fontsize=14, fontweight='bold', color=signal_color)
+
+            # Set x-ticks to show neuron indices
+            ax.set_xticks(range(0, 20, 5))
+            ax.set_xticklabels([f'N{top_indices[i]}' for i in range(0, 20, 5)])
+
+            ax.grid(True, alpha=0.3, axis='y')
+
+            # Style improvements
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['left'].set_color(signal_color)
+            ax.spines['left'].set_linewidth(2)
+
+        except (KeyError, TypeError, ValueError):
+            ax.text(0.5, 0.5, 'No neuron data',
+                    ha='center', va='center', transform=ax.transAxes)
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+    fig.suptitle('Top 20 Neuron Importance', fontsize=16, fontweight='bold')
+
+    if output_dir:
+        output_path = Path(output_dir) / 'top_neuron_importance.png'
+        fig.savefig(output_path, dpi=300, bbox_inches='tight')
+        logger.info(f"Saved top neuron importance to {output_path}")
 
     return fig
-
-
-def plot_importance_comparison(importance_matrices: Dict[str, np.ndarray],
-                               model_name: str,
-                               output_dir: Optional[Union[str, Path]] = None,
-                               fig_size: Tuple[int, int] = (15, 5)) -> plt.Figure:
-    """
-    Plot comparison of importance patterns across signal types.
-
-    Parameters
-    ----------
-    importance_matrices : Dict[str, np.ndarray]
-        Dictionary of importance matrices for different signal types
-    model_name : str
-        Name of the model
-    output_dir : Optional[Union[str, Path]], optional
-        Directory to save the figure, by default None
-    fig_size : Tuple[int, int], optional
-        Figure size, by default (15, 5)
-
-    Returns
-    -------
-    plt.Figure
-        The figure object
-    """
-    logger.info(f"Plotting importance comparison for {model_name}")
-
-    # Get signal types
-    signal_types = list(importance_matrices.keys())
-
-    # Calculate temporal importance for each signal type
-    temporal_importances = {}
-    for signal_type, matrix in importance_matrices.items():
-        temporal_importance = np.mean(matrix, axis=1)
-        if temporal_importance.sum() > 0:
-            temporal_importance = temporal_importance / temporal_importance.sum()
-        temporal_importances[signal_type] = temporal_importance
-
-    # Create figure
-    fig, axes = plt.subplots(1, len(signal_types), figsize=fig_size)
-
-    # Handle case with only one signal type
-    if len(signal_types) == 1:
-        axes = [axes]
-
-    # Plot temporal importance for each signal type
-    for i, signal_type in enumerate(signal_types):
-        axes[i].bar(range(len(temporal_importances[signal_type])), temporal_importances[signal_type])
-        axes[i].set_title(f"{signal_type}")
-        axes[i].set_xlabel("Time Step")
-        axes[i].set_ylabel("Importance")
-
-    # Set overall title
-    fig.suptitle(f"Temporal Importance Comparison - {model_name}", fontsize=16)
-
-    # Adjust layout
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
-
-    # Save figure if output directory is provided
-    if output_dir is not None:
-        output_dir = Path(output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        fig.savefig(output_dir / f"temporal_importance_comparison_{model_name}.png", dpi=300, bbox_inches='tight')
-        logger.info(
-            f"Saved temporal importance comparison to {output_dir / f'temporal_importance_comparison_{model_name}.png'}")
-
-    return fig
-
-
-def plot_cross_model_importance(temporal_importances: Dict[str, Dict[str, np.ndarray]],
-                                signal_type: str,
-                                output_dir: Optional[Union[str, Path]] = None,
-                                fig_size: Tuple[int, int] = (12, 8)) -> plt.Figure:
-    """
-    Plot temporal importance patterns across different models for a specific signal type.
-
-    Parameters
-    ----------
-    temporal_importances : Dict[str, Dict[str, np.ndarray]]
-        Dictionary of temporal importances for different models and signal types
-    signal_type : str
-        Signal type to plot
-    output_dir : Optional[Union[str, Path]], optional
-        Directory to save the figure, by default None
-    fig_size : Tuple[int, int], optional
-        Figure size, by default (12, 8)
-
-    Returns
-    -------
-    plt.Figure
-        The figure object
-    """
-    logger.info(f"Plotting cross-model importance for {signal_type}")
-
-    # Get models
-    models = list(temporal_importances.keys())
-
-    # Create figure
-    fig, ax = plt.subplots(figsize=fig_size)
-
-    # Plot temporal importance for each model
-    for model in models:
-        if signal_type in temporal_importances[model]:
-            ax.plot(temporal_importances[model][signal_type], label=model)
-
-    # Set labels
-    ax.set_xlabel("Time Step")
-    ax.set_ylabel("Importance")
-    ax.set_title(f"Temporal Importance Patterns - {signal_type}")
-
-    # Add legend
-    ax.legend()
-
-    # Add grid
-    ax.grid(True, alpha=0.3)
-
-    # Save figure if output directory is provided
-    if output_dir is not None:
-        output_dir = Path(output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        fig.savefig(output_dir / f"cross_model_importance_{signal_type}.png", dpi=300, bbox_inches='tight')
-        logger.info(f"Saved cross-model importance to {output_dir / f'cross_model_importance_{signal_type}.png'}")
-
-    return fig
-
-
-def find_important_time_windows(importance_matrix: np.ndarray,
-                                percentile: float = 90) -> List[Tuple[int, int]]:
-    """
-    Find time windows with high feature importance.
-
-    Parameters
-    ----------
-    importance_matrix : np.ndarray
-        Feature importance matrix, shape (window_size, n_neurons)
-    percentile : float, optional
-        Percentile threshold for importance, by default 90
-
-    Returns
-    -------
-    List[Tuple[int, int]]
-        List of (start, end) time windows
-    """
-    # Calculate temporal importance
-    temporal_importance = np.mean(importance_matrix, axis=1)
-
-    # Calculate threshold
-    threshold = np.percentile(temporal_importance, percentile)
-
-    # Find time points above threshold
-    above_threshold = temporal_importance > threshold
-
-    # Find contiguous segments
-    segments = []
-    start = None
-
-    for i, above in enumerate(above_threshold):
-        if above and start is None:
-            start = i
-        elif not above and start is not None:
-            segments.append((start, i - 1))
-            start = None
-
-    # Handle case where the last segment extends to the end
-    if start is not None:
-        segments.append((start, len(above_threshold) - 1))
-
-    logger.info(f"Found {len(segments)} important time windows with percentile {percentile}")
-
-    return segments
-
 

@@ -1,5 +1,5 @@
 """
-Fixed configuration with proper Random Forest class balancing.
+Fixed configuration with proper Random Forest class balancing and scientific colors.
 """
 import torch
 
@@ -12,7 +12,7 @@ DEFAULT_CONFIG = {
         "val_size": 0.15,
         "batch_size": 32,
         "num_workers": 4,
-        "binary_classification": True,  # Always use binary classification
+        "binary_classification": True,
         "mat_file": "data/raw/SFL13_5_8112021_002_new.mat",
         "xlsx_file": "data/raw/SFL13_5_8112021_002_new.xlsx"
     },
@@ -20,22 +20,22 @@ DEFAULT_CONFIG = {
     # Model parameters
     "models": {
         "random_forest": {
-            "n_estimators": 300,
-            "max_depth": 20,
+            "n_estimators": 200,
+            "max_depth": 15,
             "min_samples_split": 5,
             "min_samples_leaf": 2,
             "max_features": "sqrt",
-            "class_weight": "balanced",  # CRITICAL: This MUST be set for class balancing
+            "class_weight": "balanced_subsample",  # Better for imbalanced data
             "n_jobs": -1,
             "random_state": 42,
-            "criterion": "gini",  # Added for completeness
-            "bootstrap": True    # Added for completeness
+            "criterion": "gini",
+            "bootstrap": True
         },
         "svm": {
             "C": 1.0,
             "kernel": "rbf",
             "gamma": "scale",
-            "class_weight": "balanced",  # Also important for SVM
+            "class_weight": "balanced",
             "probability": True,
             "random_state": 42,
             "n_components": 0.95,
@@ -57,7 +57,7 @@ DEFAULT_CONFIG = {
         },
         "fcnn": {
             "hidden_dims": [256, 128, 64],
-            "output_dim": 2,  # Binary classification
+            "output_dim": 2,
             "dropout_rate": 0.4,
             "learning_rate": 0.001,
             "weight_decay": 1e-5,
@@ -67,17 +67,16 @@ DEFAULT_CONFIG = {
             "random_state": 42
         },
         "cnn": {
-            "n_filters": [64, 128, 256],
-            "kernel_size": 3,
-            "output_dim": 2,  # Binary classification
-            "dropout_rate": 0.3,
-            "learning_rate": 0.001,
-            "weight_decay": 1e-5,
+            "n_filters": [32, 64, 128],  # Reduced for better performance
+            "kernel_size": 5,  # Larger kernel for temporal patterns
+            "output_dim": 2,
+            "dropout_rate": 0.2,  # Reduced dropout
+            "learning_rate": 0.0005,  # Lower learning rate
+            "weight_decay": 1e-4,
             "batch_size": 32,
-            "num_epochs": 100,
-            "patience": 15,
+            "num_epochs": 50,
+            "patience": 10,
             "random_state": 42
-            # Removed use_focal_loss as it was causing issues
         }
     },
 
@@ -92,19 +91,34 @@ DEFAULT_CONFIG = {
     "wandb": {
         "use_wandb": True,
         "project_name": "mind-calcium-imaging",
-        "entity": None  # Set to your W&B username or team
+        "entity": None
     },
 
-    # Visualization parameters
+    # Visualization parameters with scientific colors
     "visualization": {
         "output_dir": "outputs/figures",
         "dpi": 300,
-        "format": "png"
+        "format": "png",
+        "signal_colors": {
+            "calcium_signal": "#356d9e",  # Scientific blue
+            "deltaf_signal": "#4c8b64",  # Scientific green
+            "deconv_signal": "#a85858"  # Scientific red
+        },
+        "signal_gradients": {
+            "calcium_signal": ["#f0f4f9", "#c6dcef", "#7fb0d3", "#356d9e"],
+            "deltaf_signal": ["#f6f9f4", "#d6ead9", "#9dcaa7", "#4c8b64"],
+            "deconv_signal": ["#fdf3f3", "#f0d0d0", "#d49c9c", "#a85858"]
+        },
+        "signal_display_names": {
+            "calcium_signal": "Calcium",
+            "deltaf_signal": "ΔF/F",
+            "deconv_signal": "Deconvolved"
+        }
     },
 
     # Binary classification parameters
     "classification": {
-        "task": "binary",  # Always binary: no footstep (0) vs contralateral (1)
+        "task": "binary",
         "labels": ["No footstep", "Contralateral"],
         "n_classes": 2
     }
@@ -112,15 +126,7 @@ DEFAULT_CONFIG = {
 
 
 def get_config():
-    """
-    Get default configuration with device check.
-
-    Returns
-    -------
-    dict
-        Default configuration
-    """
-    # Update device based on CUDA availability
+    """Get default configuration with device check."""
     if not torch.cuda.is_available() and DEFAULT_CONFIG["training"]["device"] == "cuda":
         DEFAULT_CONFIG["training"]["device"] = "cpu"
 
