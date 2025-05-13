@@ -80,7 +80,7 @@ python experiments/visualize_results.py
 ```
 
 ## Data
-Our research dataset comprises behavioral tracking and simultaneous neuronal recordings via two-photon calcium imaging, collected during mouse reaching tasks. Specifically, the dataset includes:
+The dataset we used in our research comprises behavioral tracking and simultaneous neuronal recordings via two-photon calcium imaging, collected during mouse reaching tasks. Specifically, the dataset includes:
 
 Behavioral data (footstep events) from Excel files
 MATLAB files containing:
