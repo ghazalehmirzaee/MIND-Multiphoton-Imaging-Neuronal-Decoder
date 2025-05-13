@@ -531,3 +531,4 @@ class CNNWrapper:
 
         return self.model.get_feature_importance()
 
+

@@ -1,5 +1,5 @@
 """
-Central configuration for the MIND project with binary classification.
+Fixed configuration with proper Random Forest class balancing.
 """
 import torch
 
@@ -25,15 +25,17 @@ DEFAULT_CONFIG = {
             "min_samples_split": 5,
             "min_samples_leaf": 2,
             "max_features": "sqrt",
-            "class_weight": "balanced",
+            "class_weight": "balanced",  # CRITICAL: This MUST be set for class balancing
             "n_jobs": -1,
-            "random_state": 42
+            "random_state": 42,
+            "criterion": "gini",  # Added for completeness
+            "bootstrap": True    # Added for completeness
         },
         "svm": {
             "C": 1.0,
             "kernel": "rbf",
             "gamma": "scale",
-            "class_weight": "balanced",
+            "class_weight": "balanced",  # Also important for SVM
             "probability": True,
             "random_state": 42,
             "n_components": 0.95,
@@ -74,8 +76,8 @@ DEFAULT_CONFIG = {
             "batch_size": 32,
             "num_epochs": 100,
             "patience": 15,
-            "random_state": 42,
-            "use_focal_loss": True
+            "random_state": 42
+            # Removed use_focal_loss as it was causing issues
         }
     },
 
@@ -123,5 +125,4 @@ def get_config():
         DEFAULT_CONFIG["training"]["device"] = "cpu"
 
     return DEFAULT_CONFIG
-
 
