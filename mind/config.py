@@ -1,6 +1,7 @@
 """
-Central configuration for the MIND project.
+Central configuration for the MIND project with binary classification.
 """
+import torch
 
 DEFAULT_CONFIG = {
     # Data parameters
@@ -11,7 +12,7 @@ DEFAULT_CONFIG = {
         "val_size": 0.15,
         "batch_size": 32,
         "num_workers": 4,
-        "binary_classification": True,
+        "binary_classification": True,  # Always use binary classification
         "mat_file": "data/raw/SFL13_5_8112021_002_new.mat",
         "xlsx_file": "data/raw/SFL13_5_8112021_002_new.xlsx"
     },
@@ -20,7 +21,7 @@ DEFAULT_CONFIG = {
     "models": {
         "random_forest": {
             "n_estimators": 300,
-            "max_depth": 30,
+            "max_depth": 20,
             "min_samples_split": 5,
             "min_samples_leaf": 2,
             "max_features": "sqrt",
@@ -46,15 +47,15 @@ DEFAULT_CONFIG = {
             "batch_size": "auto",
             "learning_rate": "adaptive",
             "learning_rate_init": 0.001,
-            "max_iter": 200,
+            "max_iter": 300,
             "early_stopping": True,
             "validation_fraction": 0.1,
-            "n_iter_no_change": 10,
+            "n_iter_no_change": 15,
             "random_state": 42
         },
         "fcnn": {
             "hidden_dims": [256, 128, 64],
-            "output_dim": 2,
+            "output_dim": 2,  # Binary classification
             "dropout_rate": 0.4,
             "learning_rate": 0.001,
             "weight_decay": 1e-5,
@@ -66,7 +67,7 @@ DEFAULT_CONFIG = {
         "cnn": {
             "n_filters": [64, 128, 256],
             "kernel_size": 3,
-            "output_dim": 2,
+            "output_dim": 2,  # Binary classification
             "dropout_rate": 0.3,
             "learning_rate": 0.001,
             "weight_decay": 1e-5,
@@ -81,7 +82,7 @@ DEFAULT_CONFIG = {
     # Training parameters
     "training": {
         "optimize_hyperparams": False,
-        "device": "cuda",  # or "cpu" if CUDA not available
+        "device": "cuda" if torch.cuda.is_available() else "cpu",
         "output_dir": "outputs/results"
     },
 
@@ -97,24 +98,30 @@ DEFAULT_CONFIG = {
         "output_dir": "outputs/figures",
         "dpi": 300,
         "format": "png"
+    },
+
+    # Binary classification parameters
+    "classification": {
+        "task": "binary",  # Always binary: no footstep (0) vs contralateral (1)
+        "labels": ["No footstep", "Contralateral"],
+        "n_classes": 2
     }
 }
 
 
 def get_config():
     """
-    Get default configuration.
+    Get default configuration with device check.
 
     Returns
     -------
     dict
         Default configuration
     """
-    import torch
-
     # Update device based on CUDA availability
     if not torch.cuda.is_available() and DEFAULT_CONFIG["training"]["device"] == "cuda":
         DEFAULT_CONFIG["training"]["device"] = "cpu"
 
     return DEFAULT_CONFIG
+
 

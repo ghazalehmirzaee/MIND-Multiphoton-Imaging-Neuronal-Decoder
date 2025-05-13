@@ -1,5 +1,5 @@
 """
-Data loader for calcium imaging data.
+Data loader for calcium imaging data with proper binary classification.
 """
 import os
 import numpy as np
@@ -45,14 +45,6 @@ def load_calcium_signals(mat_file_path: str) -> Dict[str, np.ndarray]:
             calcium_signal = data.get('calciumsignal', None)
             deltaf_signal = data.get('deltaf_cells_not_excluded', None)
             deconv_signal = data.get('DeconvMat_wanted', None)
-
-        if calcium_signal is None:
-            # Try alternate variable names
-            calcium_signal = data.get('calcium_signal', None)
-        if deltaf_signal is None:
-            deltaf_signal = data.get('deltaf_signal', None)
-        if deconv_signal is None:
-            deconv_signal = data.get('deconv_signal', None)
 
         # Check that we have at least one signal type
         if calcium_signal is None and deltaf_signal is None and deconv_signal is None:
@@ -135,6 +127,7 @@ def match_behavior_to_frames(behavior_data: pd.DataFrame, num_frames: int,
         Array of behavior labels for each frame
     """
     logger.info(f"Creating frame-by-frame behavior labels for {num_frames} frames")
+    logger.info(f"Binary classification mode: {binary_classification}")
 
     # Initialize array of zeros (no footstep)
     frame_labels = np.zeros(num_frames, dtype=np.int32)
@@ -155,7 +148,11 @@ def match_behavior_to_frames(behavior_data: pd.DataFrame, num_frames: int,
             if 'right' in foot or 'r' == foot or 'contra' in foot:
                 label = 1  # Contralateral (right) footstep
             elif 'left' in foot or 'l' == foot or 'ipsi' in foot:
-                label = 2 if not binary_classification else 0  # Ipsilateral (left) footstep
+                if binary_classification:
+                    # In binary classification, we ignore ipsilateral footsteps
+                    continue
+                else:
+                    label = 2  # Ipsilateral (left) footstep
             else:
                 logger.warning(f"Unrecognized foot value: {foot}, skipping event")
                 continue
@@ -167,6 +164,12 @@ def match_behavior_to_frames(behavior_data: pd.DataFrame, num_frames: int,
         unique_labels, counts = np.unique(frame_labels, return_counts=True)
         label_stats = {f"Label {label}": count for label, count in zip(unique_labels, counts)}
         logger.info(f"Label distribution: {label_stats}")
+
+        # Log percentages
+        total_frames = len(frame_labels)
+        for label, count in zip(unique_labels, counts):
+            percentage = (count / total_frames) * 100
+            logger.info(f"Label {label}: {count} frames ({percentage:.2f}%)")
 
         return frame_labels
 
@@ -212,9 +215,51 @@ def load_and_align_data(mat_file_path: str, xlsx_file_path: str,
     # Load behavioral data
     behavior_data = load_behavioral_data(xlsx_file_path)
 
-    # Match behavior to frames
+    # Match behavior to frames (binary classification by default)
     frame_labels = match_behavior_to_frames(behavior_data, num_frames, binary_classification)
 
     return calcium_signals, frame_labels
+
+
+def find_most_active_neurons(calcium_signals: Dict[str, np.ndarray],
+                             n_neurons: int = 20,
+                             signal_type: str = 'deconv_signal') -> np.ndarray:
+    """
+    Find the most active neurons based on calcium transient activity.
+
+    Parameters
+    ----------
+    calcium_signals : Dict[str, np.ndarray]
+        Dictionary of calcium signals
+    n_neurons : int
+        Number of top neurons to return
+    signal_type : str
+        Type of signal to use for finding active neurons
+
+    Returns
+    -------
+    np.ndarray
+        Indices of the most active neurons
+    """
+    signal = calcium_signals[signal_type]
+    if signal is None:
+        # Fallback to other signal types
+        for alt_signal in ['deltaf_signal', 'calcium_signal']:
+            if calcium_signals[alt_signal] is not None:
+                signal = calcium_signals[alt_signal]
+                break
+
+    # Calculate activity metrics
+    # For deconvolved signals, use sum of transients
+    # For other signals, use variance
+    if signal_type == 'deconv_signal':
+        activity_metric = np.sum(signal > 0, axis=0)  # Count of active frames
+    else:
+        activity_metric = np.var(signal, axis=0)  # Variance
+
+    # Get indices of top neurons
+    top_indices = np.argsort(activity_metric)[::-1][:n_neurons]
+
+    return top_indices
 
 
