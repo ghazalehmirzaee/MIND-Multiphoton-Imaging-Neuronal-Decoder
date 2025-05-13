@@ -1,249 +1,236 @@
 """
-Data processing utilities for calcium imaging data.
+Data loader for calcium imaging data.
 """
+import os
 import numpy as np
-import torch
-from torch.utils.data import Dataset, DataLoader
+import pandas as pd
+import h5py
+import scipy.io
+import hdf5storage
 from typing import Dict, Tuple, List, Optional, Any, Union
-from sklearn.model_selection import train_test_split
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-class SlidingWindowDataset(Dataset):
+def load_calcium_signals(mat_file_path: str) -> Dict[str, np.ndarray]:
     """
-    Dataset that creates sliding windows of neural activity for binary classification.
-
-    This dataset takes calcium imaging signals and creates windows of activity
-    for each frame, along with the corresponding behavior label.
-    """
-
-    def __init__(self,
-                 signal: np.ndarray,
-                 labels: np.ndarray,
-                 window_size: int = 15,
-                 step_size: int = 1,
-                 remove_zero_labels: bool = False):
-        """
-        Initialize a sliding window dataset.
-
-        Parameters
-        ----------
-        signal : np.ndarray
-            Neural activity data, shape (n_frames, n_neurons)
-        labels : np.ndarray
-            Behavior labels, shape (n_frames,)
-        window_size : int, optional
-            Size of the sliding window (number of frames), by default 15
-        step_size : int, optional
-            Step size for the sliding window, by default 1
-        remove_zero_labels : bool, optional
-            If True, remove windows where all labels are 0, by default False
-        """
-        self.signal = signal
-        self.labels = labels
-        self.window_size = window_size
-        self.step_size = step_size
-
-        # Calculate valid indices for windows
-        self.valid_indices = []
-
-        # Create sliding windows
-        n_frames = signal.shape[0]
-
-        for i in range(0, n_frames - window_size + 1, step_size):
-            # Get the label for this window (use the label of the last frame in the window)
-            window_label = labels[i + window_size - 1]
-
-            # If we're removing windows with zero labels, check the label
-            if remove_zero_labels and window_label == 0:
-                continue
-
-            self.valid_indices.append(i)
-
-        logger.info(f"Created dataset with {len(self.valid_indices)} windows")
-
-    def __len__(self):
-        return len(self.valid_indices)
-
-    def __getitem__(self, idx):
-        # Get the starting index for this window
-        start_idx = self.valid_indices[idx]
-
-        # Extract the window
-        window = self.signal[start_idx:start_idx + self.window_size, :]
-
-        # Get the label for this window (use the label of the last frame in the window)
-        label = self.labels[start_idx + self.window_size - 1]
-
-        # Convert to tensors
-        window_tensor = torch.FloatTensor(window)
-        label_tensor = torch.LongTensor([label])
-
-        return window_tensor, label_tensor.squeeze()
-
-
-def create_datasets(calcium_signals: Dict[str, np.ndarray],
-                    frame_labels: np.ndarray,
-                    window_size: int = 15,
-                    step_size: int = 1,
-                    test_size: float = 0.15,
-                    val_size: float = 0.15,
-                    random_state: int = 42) -> Dict[str, Dict[str, SlidingWindowDataset]]:
-    """
-    Create train, validation, and test datasets for each signal type.
+    Load calcium imaging signals from MATLAB file.
 
     Parameters
     ----------
-    calcium_signals : Dict[str, np.ndarray]
-        Dictionary of calcium signals (calcium_signal, deltaf_signal, deconv_signal)
-    frame_labels : np.ndarray
-        Array of behavior labels for each frame
-    window_size : int, optional
-        Size of the sliding window (number of frames), by default 15
-    step_size : int, optional
-        Step size for the sliding window, by default 1
-    test_size : float, optional
-        Fraction of data to use for testing, by default 0.15
-    val_size : float, optional
-        Fraction of data to use for validation, by default 0.15
-    random_state : int, optional
-        Random seed for reproducibility, by default 42
+    mat_file_path : str
+        Path to the MATLAB file containing calcium imaging data
 
     Returns
     -------
-    Dict[str, Dict[str, SlidingWindowDataset]]
-        Dictionary of datasets for each signal type and split (train, val, test)
+    Dict[str, np.ndarray]
+        Dictionary containing the three types of signals:
+        - 'calcium_signal': Raw fluorescence data
+        - 'deltaf_signal': ΔF/F signal
+        - 'deconv_signal': Deconvolved signal
     """
-    logger.info("Creating datasets from calcium signals")
+    logger.info(f"Loading calcium signals from {mat_file_path}")
 
-    # Create dataset dictionary
-    datasets = {}
+    try:
+        # First try using scipy.io.loadmat (for older MATLAB files)
+        try:
+            data = scipy.io.loadmat(mat_file_path)
+            calcium_signal = data.get('calciumsignal', None)
+            deltaf_signal = data.get('deltaf_cells_not_excluded', None)
+            deconv_signal = data.get('DeconvMat_wanted', None)
+        except NotImplementedError:
+            # If scipy.io.loadmat fails, try hdf5storage
+            data = hdf5storage.loadmat(mat_file_path)
+            calcium_signal = data.get('calciumsignal', None)
+            deltaf_signal = data.get('deltaf_cells_not_excluded', None)
+            deconv_signal = data.get('DeconvMat_wanted', None)
 
-    # Process each signal type
-    for signal_name, signal in calcium_signals.items():
-        if signal is None:
-            logger.warning(f"Skipping {signal_name} because it is None")
-            continue
+        if calcium_signal is None:
+            # Try alternate variable names
+            calcium_signal = data.get('calcium_signal', None)
+        if deltaf_signal is None:
+            deltaf_signal = data.get('deltaf_signal', None)
+        if deconv_signal is None:
+            deconv_signal = data.get('deconv_signal', None)
 
-        logger.info(f"Processing {signal_name}")
+        # Check that we have at least one signal type
+        if calcium_signal is None and deltaf_signal is None and deconv_signal is None:
+            logger.error(f"No calcium signals found in {mat_file_path}")
+            raise ValueError(f"No calcium signals found in {mat_file_path}")
 
-        # Create windows for the entire dataset
-        full_dataset = SlidingWindowDataset(signal, frame_labels,
-                                            window_size=window_size,
-                                            step_size=step_size)
+        # Log shapes of signals
+        if calcium_signal is not None:
+            logger.info(f"Raw calcium signal shape: {calcium_signal.shape}")
+        if deltaf_signal is not None:
+            logger.info(f"ΔF/F signal shape: {deltaf_signal.shape}")
+        if deconv_signal is not None:
+            logger.info(f"Deconvolved signal shape: {deconv_signal.shape}")
 
-        # Create indices for train/val/test split
-        indices = np.arange(len(full_dataset))
-
-        # Split into train+val and test
-        train_val_indices, test_indices = train_test_split(
-            indices, test_size=test_size, random_state=random_state, stratify=None)
-
-        # Calculate actual validation size as a fraction of train+val
-        actual_val_size = val_size / (1 - test_size)
-
-        # Split train+val into train and val
-        train_indices, val_indices = train_test_split(
-            train_val_indices, test_size=actual_val_size, random_state=random_state, stratify=None)
-
-        # Create subsets
-        train_dataset = torch.utils.data.Subset(full_dataset, train_indices)
-        val_dataset = torch.utils.data.Subset(full_dataset, val_indices)
-        test_dataset = torch.utils.data.Subset(full_dataset, test_indices)
-
-        # Store datasets
-        datasets[signal_name] = {
-            'train': train_dataset,
-            'val': val_dataset,
-            'test': test_dataset
+        return {
+            'calcium_signal': calcium_signal,
+            'deltaf_signal': deltaf_signal,
+            'deconv_signal': deconv_signal
         }
 
-        # Log split sizes
-        logger.info(
-            f"{signal_name} split sizes: train={len(train_dataset)}, val={len(val_dataset)}, test={len(test_dataset)}")
-
-    return datasets
+    except Exception as e:
+        logger.error(f"Error loading {mat_file_path}: {e}")
+        raise
 
 
-def create_data_loaders(datasets: Dict[str, Dict[str, torch.utils.data.Dataset]],
-                        batch_size: int = 32,
-                        num_workers: int = 4) -> Dict[str, Dict[str, torch.utils.data.DataLoader]]:
+def load_behavioral_data(xlsx_file_path: str) -> pd.DataFrame:
     """
-    Create DataLoader objects for each dataset.
+    Load behavioral data from Excel file.
 
     Parameters
     ----------
-    datasets : Dict[str, Dict[str, torch.utils.data.Dataset]]
-        Dictionary of datasets for each signal type and split
-    batch_size : int, optional
-        Batch size for DataLoaders, by default 32
-    num_workers : int, optional
-        Number of worker threads for DataLoaders, by default 4
+    xlsx_file_path : str
+        Path to the Excel file containing behavioral data
 
     Returns
     -------
-    Dict[str, Dict[str, torch.utils.data.DataLoader]]
-        Dictionary of DataLoaders for each signal type and split
+    pd.DataFrame
+        DataFrame containing behavioral annotations
     """
-    logger.info(f"Creating DataLoaders with batch_size={batch_size}, num_workers={num_workers}")
+    logger.info(f"Loading behavioral data from {xlsx_file_path}")
 
-    dataloaders = {}
+    try:
+        # Load the Excel file
+        behavior_data = pd.read_excel(xlsx_file_path)
 
-    for signal_name, signal_datasets in datasets.items():
-        dataloaders[signal_name] = {}
+        # Basic validation: Check if key columns exist
+        required_columns = ['foot', 'event_start_frame', 'event_end_frame']
+        missing_columns = [col for col in required_columns if col not in behavior_data.columns]
 
-        for split_name, dataset in signal_datasets.items():
-            # Use different batch sizes for different splits if needed
-            current_batch_size = batch_size
+        if missing_columns:
+            # Try some common alternate column names
+            alternates = {
+                'foot': ['Foot', 'paw', 'Paw', 'limb', 'Limb'],
+                'event_start_frame': ['Start Frame', 'start_frame', 'StartFrame', 'frame_start'],
+                'event_end_frame': ['End Frame', 'end_frame', 'EndFrame', 'frame_end']
+            }
 
-            # Create DataLoader
-            dataloader = DataLoader(
-                dataset,
-                batch_size=current_batch_size,
-                shuffle=(split_name == 'train'),  # Only shuffle training data
-                num_workers=num_workers,
-                drop_last=False,
-                pin_memory=True
-            )
+            for missing_col in missing_columns:
+                for alt in alternates.get(missing_col, []):
+                    if alt in behavior_data.columns:
+                        behavior_data[missing_col] = behavior_data[alt]
+                        logger.info(f"Using column '{alt}' for '{missing_col}'")
+                        break
 
-            dataloaders[signal_name][split_name] = dataloader
+        # Check again if any required columns are still missing
+        missing_columns = [col for col in required_columns if col not in behavior_data.columns]
+        if missing_columns:
+            logger.error(f"Missing required columns in {xlsx_file_path}: {missing_columns}")
+            raise ValueError(f"Missing required columns: {missing_columns}")
 
-            logger.info(f"Created DataLoader for {signal_name}/{split_name} with {len(dataloader)} batches")
+        logger.info(f"Loaded behavioral data with {len(behavior_data)} events")
+        return behavior_data
 
-    return dataloaders
+    except Exception as e:
+        logger.error(f"Error loading {xlsx_file_path}: {e}")
+        raise
 
 
-def get_dataset_dimensions(datasets: Dict[str, Dict[str, torch.utils.data.Dataset]]) -> Dict[str, Tuple[int, int]]:
+def match_behavior_to_frames(behavior_data: pd.DataFrame, num_frames: int,
+                             binary_classification: bool = True) -> np.ndarray:
     """
-    Get the dimensions (window_size, n_features) for each dataset.
+    Create frame-by-frame behavior labels from behavioral events.
 
     Parameters
     ----------
-    datasets : Dict[str, Dict[str, torch.utils.data.Dataset]]
-        Dictionary of datasets for each signal type and split
+    behavior_data : pd.DataFrame
+        DataFrame containing behavioral annotations
+    num_frames : int
+        Number of frames in the calcium imaging data
+    binary_classification : bool, optional
+        If True, create binary labels (0 for no footstep, 1 for contralateral/right footstep)
+        If False, create multi-class labels (0 for no footstep, 1 for contralateral, 2 for ipsilateral)
 
     Returns
     -------
-    Dict[str, Tuple[int, int]]
-        Dictionary of dimensions (window_size, n_features) for each signal type
+    np.ndarray
+        Array of behavior labels for each frame
     """
-    dimensions = {}
+    logger.info(f"Creating frame-by-frame behavior labels for {num_frames} frames")
 
-    for signal_name, signal_datasets in datasets.items():
-        # Get the first dataset (train)
-        dataset = signal_datasets['train']
+    # Initialize array of zeros (no footstep)
+    frame_labels = np.zeros(num_frames, dtype=np.int32)
 
-        # Get the first sample
-        X, _ = dataset[0]
+    try:
+        # Map footstep events to frames
+        for _, row in behavior_data.iterrows():
+            # Check if the foot column contains information about left/right
+            foot = str(row['foot']).lower()
+            start_frame = int(row['event_start_frame'])
+            end_frame = int(row['event_end_frame'])
 
-        # Get dimensions
-        if isinstance(X, torch.Tensor):
-            dimensions[signal_name] = (X.shape[0], X.shape[1])
-        else:
-            # Handle case where X is not a tensor (e.g., for classical models)
-            dimensions[signal_name] = (X.shape[0], X.shape[1])
+            # Ensure frames are within the valid range
+            start_frame = max(0, min(start_frame, num_frames - 1))
+            end_frame = max(0, min(end_frame, num_frames - 1))
 
-    return dimensions
+            # Determine the label based on the foot
+            if 'right' in foot or 'r' == foot or 'contra' in foot:
+                label = 1  # Contralateral (right) footstep
+            elif 'left' in foot or 'l' == foot or 'ipsi' in foot:
+                label = 2 if not binary_classification else 0  # Ipsilateral (left) footstep
+            else:
+                logger.warning(f"Unrecognized foot value: {foot}, skipping event")
+                continue
+
+            # Assign labels to frames
+            frame_labels[start_frame:end_frame + 1] = label
+
+        # Log stats about the labels
+        unique_labels, counts = np.unique(frame_labels, return_counts=True)
+        label_stats = {f"Label {label}": count for label, count in zip(unique_labels, counts)}
+        logger.info(f"Label distribution: {label_stats}")
+
+        return frame_labels
+
+    except Exception as e:
+        logger.error(f"Error creating behavior labels: {e}")
+        raise
+
+
+def load_and_align_data(mat_file_path: str, xlsx_file_path: str,
+                        binary_classification: bool = True) -> Tuple[Dict[str, np.ndarray], np.ndarray]:
+    """
+    Load and align calcium imaging data with behavioral labels.
+
+    Parameters
+    ----------
+    mat_file_path : str
+        Path to the MATLAB file containing calcium imaging data
+    xlsx_file_path : str
+        Path to the Excel file containing behavioral data
+    binary_classification : bool, optional
+        If True, create binary labels (0 for no footstep, 1 for contralateral/right footstep)
+
+    Returns
+    -------
+    Tuple[Dict[str, np.ndarray], np.ndarray]
+        Tuple containing:
+        - Dictionary of calcium signals
+        - Array of behavior labels
+    """
+    # Load calcium signals
+    calcium_signals = load_calcium_signals(mat_file_path)
+
+    # Determine the number of frames
+    num_frames = None
+    for signal_type, signal in calcium_signals.items():
+        if signal is not None:
+            num_frames = signal.shape[0]
+            break
+
+    if num_frames is None:
+        raise ValueError("No valid calcium signals found")
+
+    # Load behavioral data
+    behavior_data = load_behavioral_data(xlsx_file_path)
+
+    # Match behavior to frames
+    frame_labels = match_behavior_to_frames(behavior_data, num_frames, binary_classification)
+
+    return calcium_signals, frame_labels
 
