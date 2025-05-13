@@ -1,511 +1,523 @@
-# mind/models/deep/fcnn.py
+"""
+Fully Connected Neural Network model implementation for calcium imaging data.
+"""
 import torch
 import torch.nn as nn
-import torch.optim as optim
+import torch.nn.functional as F
 import numpy as np
-from typing import Dict, Any, Optional, List, Tuple
+import logging
+from typing import Dict, Any, Optional, Tuple, List, Union
+
+logger = logging.getLogger(__name__)
 
 
-class FCNN(nn.Module):
+class FCNNModel(nn.Module):
     """
-    Fully Connected Neural Network model for neural signal classification.
+    Fully Connected Neural Network model for decoding behavior from calcium imaging signals.
+
+    This module implements a multi-layer fully connected neural network with batch
+    normalization, ReLU activation, and dropout for regularization.
     """
 
     def __init__(self,
-                 input_size: int,
-                 hidden_sizes: List[int] = [256, 128, 64],
-                 output_size: int = 2,
-                 dropout_rates: List[float] = [0.3, 0.3, 0.3],
-                 batch_norm: bool = True):
+                 input_dim: int,
+                 hidden_dims: List[int] = [256, 128, 64],
+                 output_dim: int = 2,
+                 dropout_rate: float = 0.4):
         """
-        Initialize FCNN model.
+        Initialize a Fully Connected Neural Network model.
 
         Parameters
         ----------
-        input_size : int
-            Size of input features
-        hidden_sizes : List[int], optional
-            Sizes of hidden layers
-        output_size : int, optional
-            Number of output classes
-        dropout_rates : List[float], optional
-            Dropout rates for each hidden layer
-        batch_norm : bool, optional
-            Whether to use batch normalization
+        input_dim : int
+            Input dimension (window_size * n_neurons)
+        hidden_dims : List[int], optional
+            Hidden layer dimensions, by default [256, 128, 64]
+        output_dim : int, optional
+            Output dimension (number of classes), by default 2
+        dropout_rate : float, optional
+            Dropout rate for regularization, by default 0.4
         """
-        super(FCNN, self).__init__()
+        super(FCNNModel, self).__init__()
 
+        # Store parameters
+        self.input_dim = input_dim
+        self.hidden_dims = hidden_dims
+        self.output_dim = output_dim
+        self.dropout_rate = dropout_rate
+
+        # Create layers list to store all layers
         layers = []
-        prev_size = input_size
 
-        # Create hidden layers
-        for i, (size, dropout_rate) in enumerate(zip(hidden_sizes, dropout_rates)):
-            # Linear layer
-            layers.append(nn.Linear(prev_size, size))
+        # Input layer
+        prev_dim = input_dim
+        for i, hidden_dim in enumerate(hidden_dims):
+            # Add linear layer
+            layers.append(nn.Linear(prev_dim, hidden_dim))
 
-            # Batch normalization
-            if batch_norm:
-                layers.append(nn.BatchNorm1d(size))
+            # Add batch normalization
+            layers.append(nn.BatchNorm1d(hidden_dim))
 
-            # Activation
+            # Add ReLU activation
             layers.append(nn.ReLU())
 
-            # Dropout
-            layers.append(nn.Dropout(dropout_rate))
+            # Add dropout for regularization
+            # Use smaller dropout rate for the last hidden layer
+            current_dropout = dropout_rate if i < len(hidden_dims) - 1 else dropout_rate * 0.75
+            layers.append(nn.Dropout(current_dropout))
 
-            prev_size = size
+            # Update previous dimension
+            prev_dim = hidden_dim
+
+        # Create sequential model for all hidden layers
+        self.hidden_layers = nn.Sequential(*layers)
 
         # Output layer
-        layers.append(nn.Linear(prev_size, output_size))
+        self.output_layer = nn.Linear(hidden_dims[-1], output_dim)
 
-        self.model = nn.Sequential(*layers)
+        logger.info(f"Initialized FCNN model with hidden dims {hidden_dims}")
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x):
         """
-        Forward pass.
+        Forward pass through the network.
 
         Parameters
         ----------
         x : torch.Tensor
-            Input tensor
+            Input tensor, shape (batch_size, window_size, n_neurons)
 
         Returns
         -------
         torch.Tensor
-            Output tensor
+            Output tensor, shape (batch_size, output_dim)
         """
-        return self.model(x)
+        # Flatten input if needed
+        batch_size = x.size(0)
+        if x.dim() > 2:
+            x = x.view(batch_size, -1)
+
+        # Pass through hidden layers
+        x = self.hidden_layers(x)
+
+        # Pass through output layer
+        x = self.output_layer(x)
+
+        return x
+
+    def get_feature_importance(self, window_size: int, n_neurons: int) -> np.ndarray:
+        """
+        Estimate feature importance using first layer weights.
+
+        Parameters
+        ----------
+        window_size : int
+            Size of the sliding window
+        n_neurons : int
+            Number of neurons
+
+        Returns
+        -------
+        np.ndarray
+            Feature importance scores, shape (window_size, n_neurons)
+        """
+        # Get the weights of the first layer
+        first_layer = None
+        for layer in self.hidden_layers:
+            if isinstance(layer, nn.Linear):
+                first_layer = layer
+                break
+
+        if first_layer is None:
+            raise ValueError("Could not find a linear layer in the model")
+
+        # Get the weights
+        weights = first_layer.weight.data.cpu().numpy()  # Shape: (hidden_dim, input_dim)
+
+        # Calculate feature importance as the sum of absolute weights
+        feature_importance = np.abs(weights).sum(axis=0)  # Shape: (input_dim,)
+
+        # Normalize feature importance
+        feature_importance = feature_importance / feature_importance.sum()
+
+        # Reshape to (window_size, n_neurons)
+        feature_importance = feature_importance.reshape(window_size, n_neurons)
+
+        return feature_importance
 
 
-class FCNNModel:
+class FCNNWrapper:
     """
-    FCNN model wrapper for neural signal classification.
+    Wrapper for the FCNN model with training and inference functionality.
+
+    This wrapper provides a sklearn-like interface for the FCNN model, making it
+    easier to use with the rest of the codebase.
     """
 
     def __init__(self,
-                 input_size: Optional[int] = None,
-                 hidden_sizes: List[int] = [256, 128, 64],
-                 output_size: int = 2,
-                 dropout_rates: List[float] = [0.3, 0.3, 0.3],
-                 batch_norm: bool = True,
+                 input_dim: Optional[int] = None,
+                 hidden_dims: List[int] = [256, 128, 64],
+                 output_dim: int = 2,
+                 dropout_rate: float = 0.4,
                  learning_rate: float = 0.001,
                  weight_decay: float = 1e-5,
                  batch_size: int = 32,
                  num_epochs: int = 100,
-                 early_stopping_patience: int = 15,
-                 random_state: int = 42,
-                 device: Optional[str] = None):
+                 patience: int = 15,
+                 device: str = 'cuda' if torch.cuda.is_available() else 'cpu',
+                 random_state: int = 42):
         """
-        Initialize FCNN model wrapper.
+        Initialize the FCNN wrapper.
 
         Parameters
         ----------
-        input_size : int, optional
-            Size of input features (can be None if determined during training)
-        hidden_sizes : List[int], optional
-            Sizes of hidden layers
-        output_size : int, optional
-            Number of output classes
-        dropout_rates : List[float], optional
-            Dropout rates for each hidden layer
-        batch_norm : bool, optional
-            Whether to use batch normalization
+        input_dim : Optional[int], optional
+            Input dimension (window_size * n_neurons), by default None
+        hidden_dims : List[int], optional
+            Hidden layer dimensions, by default [256, 128, 64]
+        output_dim : int, optional
+            Output dimension (number of classes), by default 2
+        dropout_rate : float, optional
+            Dropout rate for regularization, by default 0.4
         learning_rate : float, optional
-            Learning rate for optimizer
+            Learning rate for the optimizer, by default 0.001
         weight_decay : float, optional
-            Weight decay for optimizer
+            Weight decay for the optimizer, by default 1e-5
         batch_size : int, optional
-            Batch size for training
+            Batch size for training, by default 32
         num_epochs : int, optional
-            Maximum number of epochs for training
-        early_stopping_patience : int, optional
-            Patience for early stopping
-        random_state : int, optional
-            Random seed for reproducibility
+            Maximum number of epochs, by default 100
+        patience : int, optional
+            Patience for early stopping, by default 15
         device : str, optional
-            Device to use for training ('cuda' or 'cpu')
+            Device for training ('cuda' or 'cpu'), by default 'cuda' if available
+        random_state : int, optional
+            Random seed for reproducibility, by default 42
         """
-        self.model_args = {
-            'input_size': input_size,
-            'hidden_sizes': hidden_sizes,
-            'output_size': output_size,
-            'dropout_rates': dropout_rates,
-            'batch_norm': batch_norm
-        }
-
-        self.training_args = {
-            'learning_rate': learning_rate,
-            'weight_decay': weight_decay,
-            'batch_size': batch_size,
-            'num_epochs': num_epochs,
-            'early_stopping_patience': early_stopping_patience,
-            'random_state': random_state
-        }
-
-        # Set device
-        if device is None:
-            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        else:
-            self.device = torch.device(device)
-
-        print(f"Using device: {self.device}")
-
-        # Set random seed
+        # Set random seed for reproducibility
         torch.manual_seed(random_state)
-        if self.device.type == 'cuda':
+        if torch.cuda.is_available():
             torch.cuda.manual_seed(random_state)
-            torch.cuda.manual_seed_all(random_state)
 
+        # Store parameters
+        self.input_dim = input_dim
+        self.hidden_dims = hidden_dims
+        self.output_dim = output_dim
+        self.dropout_rate = dropout_rate
+        self.learning_rate = learning_rate
+        self.weight_decay = weight_decay
+        self.batch_size = batch_size
+        self.num_epochs = num_epochs
+        self.patience = patience
+        self.device = device
+        self.random_state = random_state
+
+        # Model will be initialized during fit
         self.model = None
-        self.feature_importances_ = None
+        self.optimizer = None
+        self.scheduler = None
+        self.criterion = None
 
-    def _create_data_loaders(self, X_train: np.ndarray, y_train: np.ndarray,
-                             X_val: Optional[np.ndarray] = None,
-                             y_val: Optional[np.ndarray] = None) -> Tuple[
-        torch.utils.data.DataLoader, Optional[torch.utils.data.DataLoader]]:
+        logger.info(f"Initialized FCNN wrapper (device={device})")
+
+    def _prepare_data(self, X, y=None):
         """
-        Create data loaders for training and validation.
+        Prepare the data for the model.
 
         Parameters
         ----------
-        X_train : np.ndarray
-            Training data
-        y_train : np.ndarray
-            Training labels
-        X_val : np.ndarray, optional
-            Validation data
-        y_val : np.ndarray, optional
-            Validation labels
+        X : torch.Tensor or np.ndarray
+            Input features
+        y : torch.Tensor or np.ndarray, optional
+            Target labels
 
         Returns
         -------
-        Tuple[torch.utils.data.DataLoader, Optional[torch.utils.data.DataLoader]]
-            Training and validation data loaders
+        Tuple[torch.Tensor, Optional[torch.Tensor]]
+            Prepared X and y (if provided)
         """
-        # Convert numpy arrays to PyTorch tensors
-        X_train_tensor = torch.FloatTensor(X_train)
-        y_train_tensor = torch.LongTensor(y_train)
+        # Convert numpy arrays to torch tensors if needed
+        if isinstance(X, np.ndarray):
+            X = torch.FloatTensor(X)
+        if y is not None and isinstance(y, np.ndarray):
+            y = torch.LongTensor(y)
 
-        # Create datasets
-        train_dataset = torch.utils.data.TensorDataset(X_train_tensor, y_train_tensor)
+        # Move tensors to device
+        X = X.to(self.device)
+        if y is not None:
+            y = y.to(self.device)
 
-        # Create data loaders
-        train_loader = torch.utils.data.DataLoader(
-            train_dataset, batch_size=self.training_args['batch_size'], shuffle=True
-        )
+        return X, y
 
-        # Create validation data loader if validation data is provided
-        val_loader = None
-        if X_val is not None and y_val is not None:
-            X_val_tensor = torch.FloatTensor(X_val)
-            y_val_tensor = torch.LongTensor(y_val)
-            val_dataset = torch.utils.data.TensorDataset(X_val_tensor, y_val_tensor)
-            val_loader = torch.utils.data.DataLoader(
-                val_dataset, batch_size=self.training_args['batch_size'], shuffle=False
-            )
-
-        return train_loader, val_loader
-
-    def train(self, X_train: np.ndarray, y_train: np.ndarray,
-              X_val: Optional[np.ndarray] = None,
-              y_val: Optional[np.ndarray] = None) -> Dict[str, Any]:
+    def fit(self, X_train, y_train, X_val=None, y_val=None):
         """
         Train the FCNN model.
 
         Parameters
         ----------
-        X_train : np.ndarray
-            Training data
-        y_train : np.ndarray
+        X_train : torch.Tensor or np.ndarray
+            Training features
+        y_train : torch.Tensor or np.ndarray
             Training labels
-        X_val : np.ndarray, optional
-            Validation data
-        y_val : np.ndarray, optional
-            Validation labels
+        X_val : torch.Tensor or np.ndarray, optional
+            Validation features, by default None
+        y_val : torch.Tensor or np.ndarray, optional
+            Validation labels, by default None
 
         Returns
         -------
-        Dict[str, Any]
-            Dictionary containing training metrics
+        self
+            The trained model
         """
-        # If input_size is not specified, determine it from X_train
-        if self.model_args['input_size'] is None:
-            self.model_args['input_size'] = X_train.shape[1]
+        logger.info("Training FCNN model")
 
-        # Create model
-        self.model = FCNN(**self.model_args).to(self.device)
+        # Initialize input dimension if not provided
+        if self.input_dim is None:
+            if X_train.ndim == 3:
+                self.input_dim = X_train.shape[1] * X_train.shape[2]
+            else:
+                self.input_dim = X_train.shape[1]
+            logger.info(f"Input dimension inferred as {self.input_dim}")
+
+        # Initialize model
+        self.model = FCNNModel(
+            input_dim=self.input_dim,
+            hidden_dims=self.hidden_dims,
+            output_dim=self.output_dim,
+            dropout_rate=self.dropout_rate
+        ).to(self.device)
+
+        # Initialize optimizer with AdamW (includes weight decay)
+        self.optimizer = torch.optim.AdamW(
+            self.model.parameters(),
+            lr=self.learning_rate,
+            weight_decay=self.weight_decay
+        )
+
+        # Initialize learning rate scheduler
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer,
+            mode='min',
+            factor=0.5,
+            patience=5,
+            verbose=True
+        )
+
+        # Initialize loss function with class weighting
+        if hasattr(y_train, 'numpy'):
+            y_np = y_train.numpy()
+        else:
+            y_np = y_train
+
+        # Calculate class weights for balanced training
+        classes, counts = np.unique(y_np, return_counts=True)
+        class_weights = 1.0 / counts
+        class_weights = class_weights / class_weights.sum() * len(classes)
+        class_weights = torch.FloatTensor(class_weights).to(self.device)
+
+        self.criterion = nn.CrossEntropyLoss(weight=class_weights)
+
+        # Prepare data
+        X_train, y_train = self._prepare_data(X_train, y_train)
+        if X_val is not None and y_val is not None:
+            X_val, y_val = self._prepare_data(X_val, y_val)
+            has_validation = True
+        else:
+            has_validation = False
 
         # Create data loaders
-        train_loader, val_loader = self._create_data_loaders(X_train, y_train, X_val, y_val)
-
-        # Create optimizer and loss function
-        optimizer = optim.AdamW(
-            self.model.parameters(),
-            lr=self.training_args['learning_rate'],
-            weight_decay=self.training_args['weight_decay']
+        train_dataset = torch.utils.data.TensorDataset(X_train, y_train)
+        train_loader = torch.utils.data.DataLoader(
+            train_dataset,
+            batch_size=self.batch_size,
+            shuffle=True
         )
-        criterion = nn.CrossEntropyLoss()
+
+        if has_validation:
+            val_dataset = torch.utils.data.TensorDataset(X_val, y_val)
+            val_loader = torch.utils.data.DataLoader(
+                val_dataset,
+                batch_size=self.batch_size,
+                shuffle=False
+            )
 
         # Training loop
         best_val_loss = float('inf')
-        best_epoch = 0
         patience_counter = 0
-        train_losses = []
-        val_losses = []
-        train_accs = []
-        val_accs = []
+        best_model_state = None
 
-        print(f"Training for up to {self.training_args['num_epochs']} epochs...")
-        for epoch in range(self.training_args['num_epochs']):
+        for epoch in range(self.num_epochs):
             # Training phase
             self.model.train()
             train_loss = 0.0
             train_correct = 0
             train_total = 0
 
-            for inputs, targets in train_loader:
-                inputs, targets = inputs.to(self.device), targets.to(self.device)
-
-                # Zero the gradients
-                optimizer.zero_grad()
+            for batch_X, batch_y in train_loader:
+                # Zero gradients
+                self.optimizer.zero_grad()
 
                 # Forward pass
-                outputs = self.model(inputs)
-                loss = criterion(outputs, targets)
+                outputs = self.model(batch_X)
+                loss = self.criterion(outputs, batch_y)
 
                 # Backward pass and optimize
                 loss.backward()
-                optimizer.step()
+                self.optimizer.step()
 
-                # Accumulate training loss
-                train_loss += loss.item() * inputs.size(0)
+                # Accumulate loss
+                train_loss += loss.item()
 
                 # Calculate accuracy
-                _, predicted = torch.max(outputs, 1)
-                train_correct += (predicted == targets).sum().item()
-                train_total += targets.size(0)
+                _, predicted = torch.max(outputs.data, 1)
+                train_total += batch_y.size(0)
+                train_correct += (predicted == batch_y).sum().item()
 
             # Calculate average training loss and accuracy
-            train_loss = train_loss / len(train_loader.dataset)
+            train_loss /= len(train_loader)
             train_acc = train_correct / train_total
-            train_losses.append(train_loss)
-            train_accs.append(train_acc)
 
-            # Validation phase if validation data is provided
-            if val_loader is not None:
+            # Validation phase
+            if has_validation:
                 self.model.eval()
                 val_loss = 0.0
                 val_correct = 0
                 val_total = 0
 
                 with torch.no_grad():
-                    for inputs, targets in val_loader:
-                        inputs, targets = inputs.to(self.device), targets.to(self.device)
+                    for batch_X, batch_y in val_loader:
+                        outputs = self.model(batch_X)
+                        loss = self.criterion(outputs, batch_y)
 
-                        # Forward pass
-                        outputs = self.model(inputs)
-                        loss = criterion(outputs, targets)
+                        val_loss += loss.item()
 
-                        # Accumulate validation loss
-                        val_loss += loss.item() * inputs.size(0)
+                        _, predicted = torch.max(outputs.data, 1)
+                        val_total += batch_y.size(0)
+                        val_correct += (predicted == batch_y).sum().item()
 
-                        # Calculate accuracy
-                        _, predicted = torch.max(outputs, 1)
-                        val_correct += (predicted == targets).sum().item()
-                        val_total += targets.size(0)
-
-                # Calculate average validation loss and accuracy
-                val_loss = val_loss / len(val_loader.dataset)
+                val_loss /= len(val_loader)
                 val_acc = val_correct / val_total
-                val_losses.append(val_loss)
-                val_accs.append(val_acc)
+
+                # Update learning rate scheduler
+                self.scheduler.step(val_loss)
+
+                # Log progress
+                logger.info(f"Epoch {epoch + 1}/{self.num_epochs} - "
+                           f"Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}, "
+                           f"Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
 
                 # Check for early stopping
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
-                    best_epoch = epoch
                     patience_counter = 0
-
-                    # Save best model
-                    best_model_state = self.model.state_dict()
+                    # Save the best model
+                    best_model_state = self.model.state_dict().copy()
                 else:
                     patience_counter += 1
-
-                # Print progress
-                if (epoch + 1) % 10 == 0 or epoch == 0 or patience_counter >= self.training_args[
-                    'early_stopping_patience']:
-                    print(f"Epoch {epoch + 1}/{self.training_args['num_epochs']}, "
-                          f"Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}, "
-                          f"Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
-
-                # Early stopping
-                if patience_counter >= self.training_args['early_stopping_patience']:
-                    print(f"Early stopping at epoch {epoch + 1}")
-                    # Load best model
-                    self.model.load_state_dict(best_model_state)
-                    break
+                    if patience_counter >= self.patience:
+                        logger.info(f"Early stopping at epoch {epoch + 1}")
+                        break
             else:
-                # Print progress without validation data
-                if (epoch + 1) % 10 == 0 or epoch == 0:
-                    print(f"Epoch {epoch + 1}/{self.training_args['num_epochs']}, "
-                          f"Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}")
+                # Without validation data, just log training metrics
+                logger.info(f"Epoch {epoch + 1}/{self.num_epochs} - "
+                           f"Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}")
 
-        # After training, calculate feature importances
-        self._calculate_feature_importances()
+        # Load the best model if validation was used
+        if has_validation and best_model_state is not None:
+            self.model.load_state_dict(best_model_state)
+            logger.info("Loaded best model based on validation loss")
 
-        # Return metrics
-        metrics = {
-            'train_loss': train_losses,
-            'train_accuracy': train_accs,
-            'final_train_loss': train_losses[-1],
-            'final_train_accuracy': train_accs[-1],
-        }
+        logger.info("FCNN model training complete")
 
-        if val_loader is not None:
-            metrics.update({
-                'val_loss': val_losses,
-                'val_accuracy': val_accs,
-                'final_val_loss': val_losses[-1],
-                'final_val_accuracy': val_accs[-1],
-                'best_val_loss': best_val_loss,
-                'best_epoch': best_epoch
-            })
+        return self
 
-        return metrics
-
-    def _calculate_feature_importances(self) -> None:
-        """
-        Calculate feature importances based on the weights of the first layer.
-        """
-        if self.model is None:
-            raise ValueError("Model not trained yet. Call train() first.")
-
-        # Get weights from the first layer
-        first_layer_weights = self.model.model[0].weight.detach().cpu().numpy()
-
-        # Calculate feature importances as the absolute sum of weights connecting each input feature
-        self.feature_importances_ = np.abs(first_layer_weights).sum(axis=0)
-
-        # Normalize feature importances
-        self.feature_importances_ = self.feature_importances_ / np.sum(self.feature_importances_)
-
-    def predict(self, X: np.ndarray) -> np.ndarray:
+    def predict(self, X):
         """
         Make predictions with the trained model.
 
         Parameters
         ----------
-        X : np.ndarray
-            Input data
+        X : torch.Tensor or np.ndarray
+            Input features
 
         Returns
         -------
         np.ndarray
             Predicted labels
         """
+        # Ensure model is initialized
         if self.model is None:
-            raise ValueError("Model not trained yet. Call train() first.")
+            raise ValueError("Model not trained. Call fit() first.")
 
-        # Convert numpy array to PyTorch tensor
-        X_tensor = torch.FloatTensor(X).to(self.device)
+        # Prepare data
+        X, _ = self._prepare_data(X)
 
         # Set model to evaluation mode
         self.model.eval()
 
         # Make predictions
         with torch.no_grad():
-            outputs = self.model(X_tensor)
-            _, predicted = torch.max(outputs, 1)
+            outputs = self.model(X)
+            _, predicted = torch.max(outputs.data, 1)
 
-        return predicted.cpu().numpy()
+            # Convert to numpy array
+            predictions = predicted.cpu().numpy()
 
-    def predict_proba(self, X: np.ndarray) -> np.ndarray:
+        return predictions
+
+    def predict_proba(self, X):
         """
-        Get prediction probabilities.
+        Predict class probabilities.
 
         Parameters
         ----------
-        X : np.ndarray
-            Input data
+        X : torch.Tensor or np.ndarray
+            Input features
 
         Returns
         -------
         np.ndarray
-            Prediction probabilities
+            Predicted class probabilities
         """
+        # Ensure model is initialized
         if self.model is None:
-            raise ValueError("Model not trained yet. Call train() first.")
+            raise ValueError("Model not trained. Call fit() first.")
 
-        # Convert numpy array to PyTorch tensor
-        X_tensor = torch.FloatTensor(X).to(self.device)
+        # Prepare data
+        X, _ = self._prepare_data(X)
 
         # Set model to evaluation mode
         self.model.eval()
 
         # Make predictions
         with torch.no_grad():
-            outputs = self.model(X_tensor)
-            probas = torch.softmax(outputs, dim=1)
+            outputs = self.model(X)
+            probabilities = F.softmax(outputs, dim=1)
 
-        return probas.cpu().numpy()
+            # Convert to numpy array
+            probabilities = probabilities.cpu().numpy()
 
-    def save(self, file_path: str) -> None:
+        return probabilities
+
+    def get_feature_importance(self, window_size: int, n_neurons: int) -> np.ndarray:
         """
-        Save the trained model.
+        Get feature importance from the model.
 
         Parameters
         ----------
-        file_path : str
-            Path to save the model
-        """
-        if self.model is None:
-            raise ValueError("No trained model to save.")
-
-        # Save model state, model arguments, and feature importances
-        save_dict = {
-            'model_state': self.model.state_dict(),
-            'model_args': self.model_args,
-            'feature_importances': self.feature_importances_
-        }
-
-        torch.save(save_dict, file_path)
-        print(f"Model saved to {file_path}")
-
-    def load(self, file_path: str) -> None:
-        """
-        Load a trained model.
-
-        Parameters
-        ----------
-        file_path : str
-            Path to the saved model
-        """
-        # Load saved data
-        save_dict = torch.load(file_path, map_location=self.device)
-
-        # Extract model arguments and feature importances
-        self.model_args = save_dict['model_args']
-        self.feature_importances_ = save_dict['feature_importances']
-
-        # Create model
-        self.model = FCNN(**self.model_args).to(self.device)
-
-        # Load model state
-        self.model.load_state_dict(save_dict['model_state'])
-
-        print(f"Model loaded from {file_path}")
-
-    def get_feature_importances(self) -> np.ndarray:
-        """
-        Get feature importances from the trained model.
+        window_size : int
+            Size of the sliding window
+        n_neurons : int
+            Number of neurons
 
         Returns
         -------
         np.ndarray
-            Feature importances
+            Feature importance scores, shape (window_size, n_neurons)
         """
-        if self.feature_importances_ is None:
-            raise ValueError("Feature importances not available. Train the model first.")
+        # Ensure model is initialized
+        if self.model is None:
+            raise ValueError("Model not trained. Call fit() first.")
 
-        return self.feature_importances_
+        return self.model.get_feature_importance(window_size, n_neurons)
 
+    

@@ -1,203 +1,302 @@
-# mind/models/classical/random_forest.py
+"""
+Random Forest model implementation for calcium imaging data.
+"""
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import RandomizedSearchCV
-import joblib
-from typing import Dict, Any, Optional
+import logging
+from typing import Dict, Any, Optional, Tuple, List, Union
+
+logger = logging.getLogger(__name__)
 
 
 class RandomForestModel:
     """
-    Random Forest model for neural signal classification.
+    Random Forest model for decoding behavior from calcium imaging signals.
+
+    This class implements a Random Forest classifier with hyperparameter optimization
+    for decoding mouse forelimb movements from calcium imaging data.
     """
 
     def __init__(self,
-                 n_estimators: int = 200,
-                 max_depth: Optional[int] = 30,
+                 n_estimators: int = 300,
+                 max_depth: int = 20,  # Reduced from 30 - more appropriate for calcium imaging
                  min_samples_split: int = 5,
                  min_samples_leaf: int = 2,
                  max_features: str = 'sqrt',
                  class_weight: Optional[str] = 'balanced',
-                 random_state: int = 42,
                  n_jobs: int = -1,
+                 random_state: int = 42,
                  optimize_hyperparams: bool = False):
         """
-        Initialize Random Forest model.
+        Initialize a Random Forest model.
 
         Parameters
         ----------
         n_estimators : int, optional
-            Number of trees in the forest
-        max_depth : int or None, optional
-            Maximum depth of the trees
+            Number of trees in the forest, by default 300
+        max_depth : int, optional
+            Maximum depth of trees, by default 20
         min_samples_split : int, optional
-            Minimum samples required to split a node
+            Minimum samples required to split a node, by default 5
         min_samples_leaf : int, optional
-            Minimum samples required at a leaf node
+            Minimum samples required at a leaf node, by default 2
         max_features : str, optional
-            Number of features to consider for best split
-        class_weight : str or None, optional
-            Weights associated with classes
-        random_state : int, optional
-            Random seed for reproducibility
+            Number of features to consider for best split, by default 'sqrt'
+        class_weight : Optional[str], optional
+            Weights for imbalanced classes, by default 'balanced'
         n_jobs : int, optional
-            Number of jobs to run in parallel
+            Number of parallel jobs, by default -1 (all CPUs)
+        random_state : int, optional
+            Random seed for reproducibility, by default 42
         optimize_hyperparams : bool, optional
-            Whether to optimize hyperparameters using randomized search
+            Whether to optimize hyperparameters, by default False
         """
-        self.params = {
-            'n_estimators': n_estimators,
-            'max_depth': max_depth,
-            'min_samples_split': min_samples_split,
-            'min_samples_leaf': min_samples_leaf,
-            'max_features': max_features,
-            'class_weight': class_weight,
-            'random_state': random_state,
-            'n_jobs': n_jobs
-        }
+        # Store hyperparameters
+        self.n_estimators = n_estimators
+        self.max_depth = max_depth
+        self.min_samples_split = min_samples_split
+        self.min_samples_leaf = min_samples_leaf
+        self.max_features = max_features
+        self.class_weight = class_weight
+        self.n_jobs = n_jobs
+        self.random_state = random_state
         self.optimize_hyperparams = optimize_hyperparams
-        self.model = None
-        self.feature_importances_ = None
 
-    def train(self, X_train: np.ndarray, y_train: np.ndarray,
-              X_val: Optional[np.ndarray] = None,
-              y_val: Optional[np.ndarray] = None) -> Dict[str, Any]:
+        # Initialize the model
+        self.model = RandomForestClassifier(
+            n_estimators=n_estimators,
+            max_depth=max_depth,
+            min_samples_split=min_samples_split,
+            min_samples_leaf=min_samples_leaf,
+            max_features=max_features,
+            class_weight=class_weight,
+            n_jobs=n_jobs,
+            random_state=random_state
+        )
+
+        logger.info(f"Initialized Random Forest model with {n_estimators} estimators")
+
+    def _prepare_data(self, X, y=None):
+        """
+        Prepare the data for the model.
+
+        Parameters
+        ----------
+        X : torch.Tensor or np.ndarray
+            Input features, shape (n_samples, window_size, n_neurons)
+        y : torch.Tensor or np.ndarray, optional
+            Target labels, shape (n_samples,)
+
+        Returns
+        -------
+        Tuple[np.ndarray, Optional[np.ndarray]]
+            Prepared X and y (if provided)
+        """
+        # Convert torch tensors to numpy arrays if needed
+        if hasattr(X, 'numpy'):
+            X = X.numpy()
+        if y is not None and hasattr(y, 'numpy'):
+            y = y.numpy()
+
+        # Reshape X to 2D if needed (n_samples, window_size * n_neurons)
+        if X.ndim == 3:
+            n_samples, window_size, n_neurons = X.shape
+            X = X.reshape(n_samples, window_size * n_neurons)
+
+        return X, y
+
+    def optimize_hyperparameters(self, X_train, y_train, cv: int = 3, n_iter: int = 15):
+        """
+        Optimize model hyperparameters using RandomizedSearchCV.
+
+        Parameters
+        ----------
+        X_train : np.ndarray
+            Training features
+        y_train : np.ndarray
+            Training labels
+        cv : int, optional
+            Number of cross-validation folds, by default 3
+        n_iter : int, optional
+            Number of parameter settings sampled, by default 15
+
+        Returns
+        -------
+        self
+            The model with optimized hyperparameters
+        """
+        logger.info("Optimizing Random Forest hyperparameters")
+
+        # Prepare data
+        X_train, y_train = self._prepare_data(X_train, y_train)
+
+        # Define parameter grid - focused on reasonable ranges for calcium imaging
+        param_grid = {
+            'n_estimators': [100, 200, 300, 400],  # Removed 500 - diminishing returns
+            'max_depth': [10, 15, 20, 25, None],  # Focused range, removed very deep trees
+            'min_samples_split': [2, 5, 10],
+            'min_samples_leaf': [1, 2, 4],
+            'max_features': ['sqrt', 'log2']  # Removed 'None' - too many features
+        }
+
+        # Initialize RandomizedSearchCV
+        random_search = RandomizedSearchCV(
+            estimator=self.model,
+            param_distributions=param_grid,
+            n_iter=n_iter,
+            cv=cv,
+            scoring='balanced_accuracy',  # Better for imbalanced data
+            verbose=1,
+            random_state=self.random_state,
+            n_jobs=self.n_jobs
+        )
+
+        # Fit RandomizedSearchCV
+        random_search.fit(X_train, y_train)
+
+        # Get best parameters
+        best_params = random_search.best_params_
+        logger.info(f"Best parameters: {best_params}")
+        logger.info(f"Best cross-validation score: {random_search.best_score_:.4f}")
+
+        # Update model with best parameters
+        self.n_estimators = best_params.get('n_estimators', self.n_estimators)
+        self.max_depth = best_params.get('max_depth', self.max_depth)
+        self.min_samples_split = best_params.get('min_samples_split', self.min_samples_split)
+        self.min_samples_leaf = best_params.get('min_samples_leaf', self.min_samples_leaf)
+        self.max_features = best_params.get('max_features', self.max_features)
+
+        # Reinitialize model with best parameters
+        self.model = RandomForestClassifier(
+            n_estimators=self.n_estimators,
+            max_depth=self.max_depth,
+            min_samples_split=self.min_samples_split,
+            min_samples_leaf=self.min_samples_leaf,
+            max_features=self.max_features,
+            class_weight=self.class_weight,
+            n_jobs=self.n_jobs,
+            random_state=self.random_state
+        )
+
+        return self
+
+    def fit(self, X_train, y_train, X_val=None, y_val=None):
         """
         Train the Random Forest model.
 
         Parameters
         ----------
-        X_train : np.ndarray
-            Training data
-        y_train : np.ndarray
+        X_train : torch.Tensor or np.ndarray
+            Training features
+        y_train : torch.Tensor or np.ndarray
             Training labels
-        X_val : np.ndarray, optional
-            Validation data
-        y_val : np.ndarray, optional
-            Validation labels
+        X_val : torch.Tensor or np.ndarray, optional
+            Validation features, by default None
+        y_val : torch.Tensor or np.ndarray, optional
+            Validation labels, by default None
 
         Returns
         -------
-        Dict[str, Any]
-            Dictionary containing training metrics
+        self
+            The trained model
         """
-        if self.optimize_hyperparams and X_val is not None and y_val is not None:
-            print("Optimizing hyperparameters...")
-            param_grid = {
-                'n_estimators': [100, 200, 300],
-                'max_depth': [20, 30, 40, None],
-                'min_samples_split': [2, 5, 10],
-                'min_samples_leaf': [1, 2, 4],
-                'max_features': ['sqrt', 'log2', None]
-            }
+        logger.info("Training Random Forest model")
 
-            rf = RandomForestClassifier(random_state=self.params['random_state'],
-                                        n_jobs=self.params['n_jobs'],
-                                        class_weight=self.params['class_weight'])
+        # Prepare data
+        X_train, y_train = self._prepare_data(X_train, y_train)
 
-            search = RandomizedSearchCV(
-                rf, param_grid, n_iter=20, cv=3, random_state=self.params['random_state'],
-                scoring='f1_weighted', n_jobs=self.params['n_jobs']
-            )
+        # Optimize hyperparameters if requested
+        if self.optimize_hyperparams:
+            self.optimize_hyperparameters(X_train, y_train)
 
-            search.fit(X_train, y_train)
-            self.model = search.best_estimator_
-            print(f"Best hyperparameters: {search.best_params_}")
-        else:
-            print("Training Random Forest model with fixed hyperparameters...")
-            self.model = RandomForestClassifier(**self.params)
-            self.model.fit(X_train, y_train)
+        # Train the model
+        self.model.fit(X_train, y_train)
 
-        # Extract feature importances
-        self.feature_importances_ = self.model.feature_importances_
+        logger.info("Random Forest model training complete")
 
-        # Compute training and validation metrics
-        train_acc = self.model.score(X_train, y_train)
-        metrics = {'train_accuracy': train_acc}
+        # Report feature importance statistics
+        feature_importances = self.model.feature_importances_
+        logger.info(f"Feature importance stats: min={feature_importances.min():.5f}, "
+                    f"max={feature_importances.max():.5f}, mean={feature_importances.mean():.5f}")
 
+        # If validation data is provided, report validation score
         if X_val is not None and y_val is not None:
-            val_acc = self.model.score(X_val, y_val)
-            metrics['val_accuracy'] = val_acc
+            X_val, y_val = self._prepare_data(X_val, y_val)
+            val_score = self.model.score(X_val, y_val)
+            logger.info(f"Validation accuracy: {val_score:.4f}")
 
-        return metrics
+        return self
 
-    def predict(self, X: np.ndarray) -> np.ndarray:
+    def predict(self, X):
         """
         Make predictions with the trained model.
 
         Parameters
         ----------
-        X : np.ndarray
-            Input data
+        X : torch.Tensor or np.ndarray
+            Input features
 
         Returns
         -------
         np.ndarray
             Predicted labels
         """
-        if self.model is None:
-            raise ValueError("Model not trained yet. Call train() first.")
+        # Prepare data
+        X, _ = self._prepare_data(X)
 
-        return self.model.predict(X)
+        # Make predictions
+        predictions = self.model.predict(X)
 
-    def predict_proba(self, X: np.ndarray) -> np.ndarray:
+        return predictions
+
+    def predict_proba(self, X):
         """
-        Get prediction probabilities.
+        Predict class probabilities.
 
         Parameters
         ----------
-        X : np.ndarray
-            Input data
+        X : torch.Tensor or np.ndarray
+            Input features
 
         Returns
         -------
         np.ndarray
-            Prediction probabilities
+            Predicted class probabilities
         """
-        if self.model is None:
-            raise ValueError("Model not trained yet. Call train() first.")
+        # Prepare data
+        X, _ = self._prepare_data(X)
 
-        return self.model.predict_proba(X)
+        # Predict probabilities
+        probabilities = self.model.predict_proba(X)
 
-    def save(self, file_path: str) -> None:
+        return probabilities
+
+    def get_feature_importance(self, window_size: int, n_neurons: int) -> np.ndarray:
         """
-        Save the trained model.
+        Get feature importance scores.
 
         Parameters
         ----------
-        file_path : str
-            Path to save the model
-        """
-        if self.model is None:
-            raise ValueError("No trained model to save.")
-
-        joblib.dump(self.model, file_path)
-        print(f"Model saved to {file_path}")
-
-    def load(self, file_path: str) -> None:
-        """
-        Load a trained model.
-
-        Parameters
-        ----------
-        file_path : str
-            Path to the saved model
-        """
-        self.model = joblib.load(file_path)
-        self.feature_importances_ = self.model.feature_importances_
-        print(f"Model loaded from {file_path}")
-
-    def get_feature_importances(self) -> np.ndarray:
-        """
-        Get feature importances from the trained model.
+        window_size : int
+            Size of the sliding window
+        n_neurons : int
+            Number of neurons
 
         Returns
         -------
         np.ndarray
-            Feature importances
+            Feature importance scores, shape (window_size, n_neurons)
         """
-        if self.feature_importances_ is None:
-            raise ValueError("Feature importances not available. Train the model first.")
+        # Make sure the model is trained
+        if not hasattr(self.model, 'feature_importances_'):
+            raise ValueError("Model must be trained before getting feature importance")
 
-        return self.feature_importances_
+        # Get feature importance
+        feature_importances = self.model.feature_importances_
+
+        # Reshape to (window_size, n_neurons)
+        feature_importances = feature_importances.reshape(window_size, n_neurons)
+
+        return feature_importances
 
