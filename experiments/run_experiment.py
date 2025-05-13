@@ -1,135 +1,301 @@
 """
-Simplified experiment runner.
+Experiment runner for calcium imaging neural decoder with binary classification.
 """
 import argparse
-import os
-import sys
-import numpy as np
 import logging
+import json
 from pathlib import Path
+import time
+from typing import Dict, Any
+import torch
 import wandb
+import numpy as np
 
-# Add project root to path
-sys.path.append(str(Path(__file__).parent.parent))
-
-from mind.data.loader import load_and_align_data
+from mind.data.loader import load_and_align_data, find_most_active_neurons
 from mind.data.processor import create_datasets
 from mind.training.trainer import train_model
+from mind.visualization.comprehensive_viz import create_all_visualizations
 from mind.config import get_config
 from mind.utils.logging import setup_logging
 
-# Set up logging
-setup_logging(log_level='INFO', console=True)
 logger = logging.getLogger(__name__)
+
+
+def run_single_experiment(model_type: str, signal_type: str, config: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Run a single experiment for one model and signal type.
+
+    Parameters
+    ----------
+    model_type : str
+        Type of model to train
+    signal_type : str
+        Type of signal to use
+    config : Dict[str, Any]
+        Configuration dictionary
+
+    Returns
+    -------
+    Dict[str, Any]
+        Results dictionary
+    """
+    logger.info(f"Running experiment: {model_type} on {signal_type}")
+
+    # Load data with binary classification
+    calcium_signals, frame_labels = load_and_align_data(
+        mat_file_path=config["data"]["mat_file"],
+        xlsx_file_path=config["data"]["xlsx_file"],
+        binary_classification=True  # Force binary classification
+    )
+
+    # Verify we have only binary labels
+    unique_labels = np.unique(frame_labels)
+    logger.info(f"Unique labels in data: {unique_labels}")
+    if len(unique_labels) > 2 or max(unique_labels) > 1:
+        logger.error("Data contains more than binary labels! Check binary classification handling.")
+        return {}
+
+    # Create datasets
+    datasets = create_datasets(
+        calcium_signals=calcium_signals,
+        frame_labels=frame_labels,
+        window_size=config["data"]["window_size"],
+        step_size=config["data"]["step_size"],
+        test_size=config["data"]["test_size"],
+        val_size=config["data"]["val_size"],
+        random_state=config["models"][model_type]["random_state"]
+    )
+
+    # Check if signal type exists
+    if signal_type not in datasets:
+        logger.error(f"Signal type {signal_type} not found in datasets")
+        return {}
+
+    # Get dimensions
+    window_size = config["data"]["window_size"]
+    sample, _ = datasets[signal_type]['train'][0]
+    n_neurons = sample.shape[1]
+
+    logger.info(f"Data dimensions - Window size: {window_size}, Neurons: {n_neurons}")
+
+    # Train model
+    results = train_model(
+        model_type=model_type,
+        model_params=config["models"][model_type],
+        datasets=datasets,
+        signal_type=signal_type,
+        window_size=window_size,
+        n_neurons=n_neurons,
+        output_dir=config["training"]["output_dir"],
+        device=config["training"]["device"],
+        optimize_hyperparams=config["training"]["optimize_hyperparams"],
+        use_wandb=config["wandb"]["use_wandb"]
+    )
+
+    # Add calcium signals to results for visualization
+    results['calcium_signals'] = calcium_signals
+
+    return results
+
+
+def run_all_experiments(config: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """
+    Run all model-signal combinations.
+
+    Parameters
+    ----------
+    config : Dict[str, Any]
+        Configuration dictionary
+
+    Returns
+    -------
+    Dict[str, Dict[str, Any]]
+        Nested dictionary of results
+    """
+    models = ['random_forest', 'svm', 'mlp', 'fcnn', 'cnn']
+    signals = ['calcium_signal', 'deltaf_signal', 'deconv_signal']
+
+    results = {}
+
+    for model in models:
+        results[model] = {}
+        for signal in signals:
+            logger.info(f"\n{'=' * 50}")
+            logger.info(f"Starting: {model} on {signal}")
+            logger.info(f"{'=' * 50}\n")
+
+            if config["wandb"]["use_wandb"]:
+                wandb.init(
+                    project=config["wandb"]["project_name"],
+                    name=f"{model}_{signal}",
+                    config={
+                        "model": model,
+                        "signal": signal,
+                        **config
+                    },
+                    reinit=True
+                )
+
+            try:
+                result = run_single_experiment(model, signal, config)
+                results[model][signal] = result
+
+                # Log summary metrics to W&B
+                if config["wandb"]["use_wandb"] and 'metrics' in result:
+                    wandb.log(result['metrics'])
+                    wandb.finish()
+
+            except Exception as e:
+                logger.error(f"Error running {model} on {signal}: {e}")
+                if config["wandb"]["use_wandb"]:
+                    wandb.finish()
+                continue
+
+    return results
 
 
 def main():
     """
-    Run a single experiment with specified model and signal type.
+    Main entry point for experiments.
     """
-    # Get default configuration
-    config = get_config()
-
-    # Parse arguments
-    parser = argparse.ArgumentParser(description="Run neural decoding experiment")
-    parser.add_argument("--model", type=str, required=True,
-                        choices=['random_forest', 'svm', 'mlp', 'fcnn', 'cnn'],
-                        help="Model type")
-    parser.add_argument("--signal", type=str, required=True,
-                        choices=['calcium_signal', 'deltaf_signal', 'deconv_signal'],
-                        help="Signal type")
-    parser.add_argument("--data", type=str, default=config["data"]["mat_file"],
-                        help="Path to .mat file")
-    parser.add_argument("--behavior", type=str, default=config["data"]["xlsx_file"],
-                        help="Path to behavior Excel file")
-    parser.add_argument("--output", type=str, default=config["training"]["output_dir"],
-                        help="Output directory")
-    parser.add_argument("--optimize", action="store_true",
-                        help="Optimize hyperparameters")
-    parser.add_argument("--no-wandb", action="store_true",
-                        help="Disable W&B tracking")
+    parser = argparse.ArgumentParser(description="Run neural decoding experiments")
+    parser.add_argument("--model", type=str,
+                        choices=['random_forest', 'svm', 'mlp', 'fcnn', 'cnn', 'all'],
+                        default='all', help="Model to run (or 'all')")
+    parser.add_argument("--signal", type=str,
+                        choices=['calcium_signal', 'deltaf_signal', 'deconv_signal', 'all'],
+                        default='all', help="Signal type to use (or 'all')")
+    parser.add_argument("--data", type=str, help="Path to .mat file")
+    parser.add_argument("--behavior", type=str, help="Path to .xlsx file")
+    parser.add_argument("--output", type=str, default="outputs/results", help="Output directory")
+    parser.add_argument("--optimize", action="store_true", help="Optimize hyperparameters")
+    parser.add_argument("--no-wandb", action="store_true", help="Disable W&B tracking")
+    parser.add_argument("--visualize", action="store_true", help="Create visualizations")
+    parser.add_argument("--viz-only", action="store_true", help="Only create visualizations from existing results")
 
     args = parser.parse_args()
 
-    # Update configuration with CLI arguments
-    config["data"]["mat_file"] = args.data
-    config["data"]["xlsx_file"] = args.behavior
+    # Setup logging
+    setup_logging(log_level='INFO', console=True)
+
+    # Get configuration
+    config = get_config()
+
+    # Update configuration from command line
+    if args.data:
+        config["data"]["mat_file"] = args.data
+    if args.behavior:
+        config["data"]["xlsx_file"] = args.behavior
     config["training"]["output_dir"] = args.output
     config["training"]["optimize_hyperparams"] = args.optimize
     config["wandb"]["use_wandb"] = not args.no_wandb
 
-    # Initialize W&B
-    if config["wandb"]["use_wandb"]:
-        wandb.init(
-            project=config["wandb"]["project_name"],
-            entity=config["wandb"]["entity"],
-            config={
-                "model": args.model,
-                "signal_type": args.signal,
-                "optimize_hyperparams": config["training"]["optimize_hyperparams"],
-                "window_size": config["data"]["window_size"],
-                "step_size": config["data"]["step_size"],
-                "model_params": config["models"][args.model]
-            }
+    # Check if we're only visualizing
+    if args.viz_only:
+        # Load existing results
+        results_path = Path(args.output) / "all_results.json"
+        if not results_path.exists():
+            logger.error(f"Results file not found: {results_path}")
+            return
+
+        with open(results_path, 'r') as f:
+            results = json.load(f)
+
+        # Load calcium signals for visualization
+        calcium_signals, _ = load_and_align_data(
+            mat_file_path=config["data"]["mat_file"],
+            xlsx_file_path=config["data"]["xlsx_file"],
+            binary_classification=True
         )
 
-    try:
-        # Load data
-        logger.info(f"Loading data from {args.data} and {args.behavior}")
-        calcium_signals, frame_labels = load_and_align_data(
-            mat_file_path=args.data,
-            xlsx_file_path=args.behavior,
-            binary_classification=config["data"]["binary_classification"]
-        )
+        # Create visualizations
+        viz_dir = Path(args.output) / "visualizations"
+        create_all_visualizations(results, calcium_signals, viz_dir)
+        return
 
-        # Create datasets
-        logger.info("Creating datasets")
-        datasets = create_datasets(
-            calcium_signals=calcium_signals,
-            frame_labels=frame_labels,
-            window_size=config["data"]["window_size"],
-            step_size=config["data"]["step_size"],
-            test_size=config["data"]["test_size"],
-            val_size=config["data"]["val_size"],
-            random_state=config["models"][args.model]["random_state"]
-        )
+    # Run experiments
+    if args.model == 'all' and args.signal == 'all':
+        # Run all experiments
+        results = run_all_experiments(config)
 
-        # Get window size and number of neurons
-        window_size = config["data"]["window_size"]
-        if args.signal in datasets and 'train' in datasets[args.signal]:
-            sample, _ = datasets[args.signal]['train'][0]
-            n_neurons = sample.shape[1]
-        else:
-            n_neurons = calcium_signals[args.signal].shape[1]
+        # Save all results
+        output_dir = Path(config["training"]["output_dir"])
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"Window size: {window_size}, Number of neurons: {n_neurons}")
+        # Convert numpy arrays to lists for JSON serialization
+        json_results = {}
+        for model in results:
+            json_results[model] = {}
+            for signal in results[model]:
+                json_results[model][signal] = {}
+                for key, value in results[model][signal].items():
+                    if key == 'calcium_signals':
+                        continue  # Skip calcium signals for JSON
+                    if isinstance(value, np.ndarray):
+                        json_results[model][signal][key] = value.tolist()
+                    elif isinstance(value, dict):
+                        json_results[model][signal][key] = {}
+                        for k, v in value.items():
+                            if isinstance(v, np.ndarray):
+                                json_results[model][signal][key][k] = v.tolist()
+                            else:
+                                json_results[model][signal][key][k] = v
+                    else:
+                        json_results[model][signal][key] = value
 
-        # Train model
-        results = train_model(
-            model_type=args.model,
-            model_params=config["models"][args.model],
-            datasets=datasets,
-            signal_type=args.signal,
-            window_size=window_size,
-            n_neurons=n_neurons,
-            output_dir=args.output,
-            device=config["training"]["device"],
-            optimize_hyperparams=config["training"]["optimize_hyperparams"],
-            use_wandb=config["wandb"]["use_wandb"]
-        )
+        with open(output_dir / "all_results.json", 'w') as f:
+            json.dump(json_results, f, indent=2)
 
-        logger.info(f"Experiment completed successfully")
+        logger.info(f"Saved all results to {output_dir / 'all_results.json'}")
 
-    except Exception as e:
-        logger.error(f"Error in experiment: {e}", exc_info=True)
-        raise
+        # Create visualizations if requested
+        if args.visualize:
+            viz_dir = output_dir / "visualizations"
 
-    finally:
-        # Finish W&B
-        if config["wandb"]["use_wandb"]:
-            wandb.finish()
+            # Get calcium signals from the first result
+            calcium_signals = None
+            for model in results:
+                for signal in results[model]:
+                    if 'calcium_signals' in results[model][signal]:
+                        calcium_signals = results[model][signal]['calcium_signals']
+                        break
+                if calcium_signals is not None:
+                    break
+
+            create_all_visualizations(json_results, calcium_signals, viz_dir)
+
+    else:
+        # Run single experiment
+        if args.model == 'all' or args.signal == 'all':
+            logger.error("Cannot specify 'all' for only one dimension")
+            return
+
+        result = run_single_experiment(args.model, args.signal, config)
+
+        # Save result
+        output_dir = Path(config["training"]["output_dir"])
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        filename = f"{args.model}_{args.signal}_{timestamp}.json"
+
+        # Convert numpy arrays for JSON
+        json_result = {}
+        for key, value in result.items():
+            if key == 'calcium_signals':
+                continue
+            if isinstance(value, np.ndarray):
+                json_result[key] = value.tolist()
+            else:
+                json_result[key] = value
+
+        with open(output_dir / filename, 'w') as f:
+            json.dump(json_result, f, indent=2)
+
+        logger.info(f"Saved result to {output_dir / filename}")
 
 
 if __name__ == "__main__":
     main()
+
 
