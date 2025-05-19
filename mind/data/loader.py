@@ -263,4 +263,3 @@ def find_most_active_neurons(calcium_signals: Dict[str, np.ndarray],
 
     return top_indices
 
-
