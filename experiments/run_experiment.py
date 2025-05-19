@@ -1,3 +1,4 @@
+
 """
 Enhanced experiment runner with NumPy 2.0 compatibility and improved reproducibility.
 """
@@ -19,6 +20,14 @@ from mind.training.trainer import train_model
 from mind.visualization.comprehensive_viz import create_all_visualizations
 from mind.config import get_config
 from mind.utils.logging import setup_logging
+
+# Import the modified CNN model if available
+try:
+    from mind.models.deep.modified_cnn import ModifiedCNNWrapper
+
+    HAS_MODIFIED_CNN = True
+except ImportError:
+    HAS_MODIFIED_CNN = False
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +144,7 @@ def run_single_experiment(model_type: str, signal_type: str, config: Dict[str, A
     Parameters
     ----------
     model_type : str
-        Type of model to train ('random_forest', 'svm', 'mlp', 'fcnn', 'cnn')
+        Type of model to train ('random_forest', 'svm', 'mlp', 'fcnn', 'cnn', 'modified_cnn')
     signal_type : str
         Type of signal to use ('calcium_signal', 'deltaf_signal', 'deconv_signal')
     config : Dict[str, Any]
@@ -163,6 +172,7 @@ def run_single_experiment(model_type: str, signal_type: str, config: Dict[str, A
         return {}
 
     # Create datasets with consistent random seed
+    random_state = config["models"].get(model_type, {}).get("random_state", 42)
     datasets = create_datasets(
         calcium_signals=calcium_signals,
         frame_labels=frame_labels,
@@ -170,7 +180,7 @@ def run_single_experiment(model_type: str, signal_type: str, config: Dict[str, A
         step_size=config["data"]["step_size"],
         test_size=config["data"]["test_size"],
         val_size=config["data"]["val_size"],
-        random_state=config["models"][model_type]["random_state"]
+        random_state=random_state
     )
 
     # Check if signal type exists
@@ -185,19 +195,66 @@ def run_single_experiment(model_type: str, signal_type: str, config: Dict[str, A
 
     logger.info(f"Data dimensions - Window size: {window_size}, Neurons: {n_neurons}")
 
-    # Train model
-    results = train_model(
-        model_type=model_type,
-        model_params=config["models"][model_type],
-        datasets=datasets,
-        signal_type=signal_type,
-        window_size=window_size,
-        n_neurons=n_neurons,
-        output_dir=config["training"]["output_dir"],
-        device=config["training"]["device"],
-        optimize_hyperparams=config["training"]["optimize_hyperparams"],
-        use_wandb=config["wandb"]["use_wandb"]
-    )
+    # Train model (use modified CNN if requested and available)
+    if model_type == 'modified_cnn' and HAS_MODIFIED_CNN:
+        logger.info("Using modified CNN model")
+
+        # Extract data from datasets
+        X_train = torch.stack([X for X, _ in datasets[signal_type]['train']])
+        y_train = torch.tensor([y.item() for _, y in datasets[signal_type]['train']])
+        X_val = torch.stack([X for X, _ in datasets[signal_type]['val']])
+        y_val = torch.tensor([y.item() for _, y in datasets[signal_type]['val']])
+        X_test = torch.stack([X for X, _ in datasets[signal_type]['test']])
+        y_test = torch.tensor([y.item() for _, y in datasets[signal_type]['test']])
+
+        # Initialize and train the modified CNN model
+        device = config["training"]["device"]
+        model = ModifiedCNNWrapper(
+            window_size=window_size,
+            n_neurons=n_neurons,
+            device=device,
+            random_state=config.get("seed", 42)
+        )
+
+        model.fit(X_train, y_train, X_val, y_val)
+
+        # Evaluate model
+        from mind.evaluation.metrics import evaluate_model
+        from mind.evaluation.feature_importance import extract_feature_importance, create_importance_summary
+
+        eval_results = evaluate_model(model, X_test, y_test)
+
+        # Extract feature importance
+        importance_matrix = extract_feature_importance(model, window_size, n_neurons)
+        importance_summary = create_importance_summary(importance_matrix, window_size, n_neurons)
+
+        # Get top 100 contributing neurons
+        top_100_neurons = model.get_top_contributing_neurons(n_top=100)
+        importance_summary['top_100_neurons'] = top_100_neurons.tolist()
+
+        # Create results dictionary
+        results = {
+            'metrics': eval_results['metrics'],
+            'confusion_matrix': eval_results['confusion_matrix'].tolist(),
+            'importance_summary': importance_summary,
+            'top_100_neurons': top_100_neurons.tolist()
+        }
+
+    else:
+        # Use standard training pipeline
+        model_params = config["models"].get(model_type, {})
+        results = train_model(
+            model_type=model_type,
+            model_params=model_params,
+            datasets=datasets,
+            signal_type=signal_type,
+            window_size=window_size,
+            n_neurons=n_neurons,
+            output_dir=config["training"]["output_dir"],
+            device=config["training"]["device"],
+            optimize_hyperparams=config["training"]["optimize_hyperparams"],
+            use_wandb=config["wandb"]["use_wandb"]
+        )
 
     return results
 
@@ -219,7 +276,11 @@ def run_all_experiments(config: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     Dict[str, Dict[str, Any]]
         Nested dictionary of results
     """
+    # Include modified_cnn if available
     models = ['random_forest', 'svm', 'mlp', 'fcnn', 'cnn']
+    if HAS_MODIFIED_CNN:
+        models.append('modified_cnn')
+
     signals = ['calcium_signal', 'deltaf_signal', 'deconv_signal']
 
     results = {}
@@ -273,9 +334,14 @@ def main():
     4. Saves results in JSON format
     5. Optionally creates visualizations
     """
+    # Set up argument parser with additional options
+    model_choices = ['random_forest', 'svm', 'mlp', 'fcnn', 'cnn', 'all']
+    if HAS_MODIFIED_CNN:
+        model_choices.append('modified_cnn')
+
     parser = argparse.ArgumentParser(description="Run neural decoding experiments")
     parser.add_argument("--model", type=str,
-                        choices=['random_forest', 'svm', 'mlp', 'fcnn', 'cnn', 'all'],
+                        choices=model_choices,
                         default='all', help="Model to run (or 'all')")
     parser.add_argument("--signal", type=str,
                         choices=['calcium_signal', 'deltaf_signal', 'deconv_signal', 'all'],
@@ -288,6 +354,7 @@ def main():
     parser.add_argument("--visualize", action="store_true", help="Create visualizations")
     parser.add_argument("--viz-only", action="store_true", help="Only create visualizations from existing results")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
+    parser.add_argument("--top-n", type=int, default=100, help="Number of top neurons to visualize")
 
     args = parser.parse_args()
 
@@ -299,6 +366,9 @@ def main():
 
     # Get configuration
     config = get_config()
+
+    # Add the seed to the config
+    config["seed"] = args.seed
 
     # Update configuration from command line
     if args.data:
@@ -333,7 +403,15 @@ def main():
 
         # Create visualizations
         viz_dir = Path(args.output) / "visualizations"
-        create_all_visualizations(results, calcium_signals, viz_dir)
+
+        # Pass the mat_file_path for neuron bubble charts
+        create_all_visualizations(
+            results=results,
+            calcium_signals=calcium_signals,
+            output_dir=viz_dir,
+            mat_file_path=config["data"]["mat_file"],
+            top_n=args.top_n
+        )
         return
 
     # Run experiments
@@ -377,14 +455,81 @@ def main():
                 binary_classification=True
             )
 
-            create_all_visualizations(json_results, calcium_signals, viz_dir)
+            # Pass the mat_file_path for neuron bubble charts
+            create_all_visualizations(
+                results=json_results,
+                calcium_signals=calcium_signals,
+                output_dir=viz_dir,
+                mat_file_path=config["data"]["mat_file"],
+                top_n=args.top_n
+            )
+
+    elif args.model == 'all' or args.signal == 'all':
+        # Run one model on all signals or all models on one signal
+        results = {}
+
+        if args.model == 'all':
+            # Run all models on one signal
+            models = ['random_forest', 'svm', 'mlp', 'fcnn', 'cnn']
+            if HAS_MODIFIED_CNN:
+                models.append('modified_cnn')
+            signals = [args.signal]
+        else:
+            # Run one model on all signals
+            models = [args.model]
+            signals = ['calcium_signal', 'deltaf_signal', 'deconv_signal']
+
+        # Initialize results structure
+        for model in models:
+            results[model] = {}
+
+        # Run experiments
+        for model in models:
+            for signal in signals:
+                logger.info(f"\n{'=' * 50}")
+                logger.info(f"Starting: {model} on {signal}")
+                logger.info(f"{'=' * 50}\n")
+
+                try:
+                    result = run_single_experiment(model, signal, config)
+                    results[model][signal] = result
+                except Exception as e:
+                    logger.error(f"Error running {model} on {signal}: {e}")
+                    results[model][signal] = {}
+
+        # Save results
+        output_dir = Path(config["training"]["output_dir"])
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Convert to JSON-serializable format
+        json_results = deep_convert_to_json_serializable(results)
+
+        with open(output_dir / "results.json", 'w') as f:
+            json.dump(json_results, f, indent=2)
+        logger.info(f"Saved results to {output_dir / 'results.json'}")
+
+        # Create visualizations if requested
+        if args.visualize:
+            viz_dir = output_dir / "visualizations"
+
+            # Load calcium signals
+            calcium_signals, _ = load_and_align_data(
+                mat_file_path=config["data"]["mat_file"],
+                xlsx_file_path=config["data"]["xlsx_file"],
+                binary_classification=True
+            )
+
+            # Create visualizations
+            create_all_visualizations(
+                results=json_results,
+                calcium_signals=calcium_signals,
+                output_dir=viz_dir,
+                mat_file_path=config["data"]["mat_file"],
+                top_n=args.top_n
+            )
 
     else:
-        # Run single experiment
-        if args.model == 'all' or args.signal == 'all':
-            logger.error("Cannot specify 'all' for only one dimension")
-            return
-
+        # Run a single experiment
         result = run_single_experiment(args.model, args.signal, config)
 
         # Save result
