@@ -781,6 +781,7 @@ def plot_performance_radar(
     return fig
 
 
+
 def plot_model_performance_heatmap(
         results: Dict[str, Dict[str, Any]],
         output_dir: Optional[Path] = None
@@ -872,3 +873,4 @@ def plot_model_performance_heatmap(
         logger.info(f"Saved model performance heatmap to {output_path}")
 
     return fig
+

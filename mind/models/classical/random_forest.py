@@ -179,4 +179,3 @@ class RandomForestModel:
             n_features = window_size * n_neurons
             return importance[:n_features].reshape(window_size, n_neurons)
 
-        

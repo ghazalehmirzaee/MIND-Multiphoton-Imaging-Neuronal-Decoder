@@ -390,4 +390,3 @@ class CNNWrapper:
 
         return top_indices
 
-    

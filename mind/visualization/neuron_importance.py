@@ -767,18 +767,17 @@ def extract_neuron_importance(model_or_results: Any,
 
     return importance_dict
 
-
 def plot_neuron_bubble_charts(calcium_signals: Dict[str, np.ndarray],
-                              excluded_cells: np.ndarray,
-                              roi_matrix: np.ndarray,
-                              importance_dict: Dict[str, Tuple[np.ndarray, np.ndarray]],
-                              top_n: int = 100,
-                              output_path: Optional[str] = None,
-                              min_bubble_size: float = 10,
-                              max_bubble_size: float = 500,
-                              alpha: float = 0.7,
-                              show_plot: bool = True,
-                              num_labels: int = 15) -> plt.Figure:
+                             excluded_cells: np.ndarray,
+                             roi_matrix: np.ndarray,
+                             importance_dict: Dict[str, Tuple[np.ndarray, np.ndarray]],
+                             top_n: int = 100,
+                             output_path: Optional[str] = None,
+                             min_bubble_size: float = 10,
+                             max_bubble_size: float = 500,
+                             alpha: float = 0.7,
+                             show_plot: bool = True,
+                             num_labels: int = 15) -> plt.Figure:
     """
     Plot bubble charts showing top contributing neurons with aligned indices and consistent framing.
 
