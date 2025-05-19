@@ -36,13 +36,13 @@ def load_calcium_signals(mat_file_path: str) -> Dict[str, np.ndarray]:
         # First try using scipy.io.loadmat (for older MATLAB files)
         try:
             data = scipy.io.loadmat(mat_file_path)
-            calcium_signal = data.get('calciumsignal', None)
+            calcium_signal = data.get('calciumsignal_wanted', None)
             deltaf_signal = data.get('deltaf_cells_not_excluded', None)
             deconv_signal = data.get('DeconvMat_wanted', None)
         except NotImplementedError:
             # If scipy.io.loadmat fails, try hdf5storage
             data = hdf5storage.loadmat(mat_file_path)
-            calcium_signal = data.get('calciumsignal', None)
+            calcium_signal = data.get('calciumsignal_wanted', None)
             deltaf_signal = data.get('deltaf_cells_not_excluded', None)
             deconv_signal = data.get('DeconvMat_wanted', None)
 
@@ -199,6 +199,7 @@ def load_and_align_data(mat_file_path: str, xlsx_file_path: str,
         - Dictionary of calcium signals
         - Array of behavior labels
     """
+
     # Load calcium signals
     calcium_signals = load_calcium_signals(mat_file_path)
 
