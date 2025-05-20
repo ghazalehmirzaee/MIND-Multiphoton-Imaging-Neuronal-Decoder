@@ -1,9 +1,14 @@
-# mind/visualization/config.py
 """
 Centralized configuration for all visualizations ensuring consistency.
+
+This module defines colors, display names, figure sizes, and styling functions
+used consistently across all visualization components.
 """
 import matplotlib.pyplot as plt
 import seaborn as sns
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Define consistent scientific color scheme
 SIGNAL_COLORS = {
@@ -32,7 +37,8 @@ MODEL_DISPLAY_NAMES = {
     'svm': 'SVM',
     'mlp': 'MLP',
     'fcnn': 'FCNN',
-    'cnn': 'CNN'
+    'cnn': 'CNN',
+    'modified_cnn': 'Modified CNN'
 }
 
 # Standard figure sizes
@@ -46,7 +52,12 @@ FIGURE_SIZES = {
 
 
 def set_publication_style():
-    """Set publication-quality plot styling."""
+    """
+    Set publication-quality plot styling.
+
+    This function configures matplotlib to produce plots with a consistent,
+    professional appearance suitable for scientific publications.
+    """
     plt.style.use('seaborn-v0_8-white')
     sns.set_style("white")
     plt.rcParams['font.size'] = 11
@@ -57,9 +68,35 @@ def set_publication_style():
     plt.rcParams['legend.fontsize'] = 10
     plt.rcParams['figure.titlesize'] = 16
 
+    # Additional settings for publication quality
+    plt.rcParams['figure.dpi'] = 150
+    plt.rcParams['savefig.dpi'] = 300
+    plt.rcParams['savefig.bbox'] = 'tight'
+    plt.rcParams['savefig.pad_inches'] = 0.1
+
+    logger.debug("Set publication-quality plot styling")
+
 
 def get_signal_colormap(signal_type):
-    """Get a custom colormap for a specific signal type."""
+    """
+    Get a custom colormap for a specific signal type.
+
+    Parameters
+    ----------
+    signal_type : str
+        Signal type ('calcium_signal', 'deltaf_signal', or 'deconv_signal')
+
+    Returns
+    -------
+    matplotlib.colors.LinearSegmentedColormap
+        Custom colormap for the signal type
+    """
     from matplotlib.colors import LinearSegmentedColormap
+
+    if signal_type not in SIGNAL_GRADIENTS:
+        logger.warning(f"Unknown signal type: {signal_type}, using default colormap")
+        return plt.cm.viridis
+
     gradient = SIGNAL_GRADIENTS[signal_type]
     return LinearSegmentedColormap.from_list('custom', gradient)
+

@@ -35,11 +35,25 @@ def calculate_classification_metrics(y_true: np.ndarray,
     """
     # Convert to numpy arrays if needed
     if hasattr(y_true, 'numpy'):
-        y_true = y_true.numpy()
+        # Add .cpu() before .numpy() if tensor might be on GPU
+        if hasattr(y_true, 'cpu'):
+            y_true = y_true.cpu().numpy()
+        else:
+            y_true = y_true.numpy()
+
     if hasattr(y_pred, 'numpy'):
-        y_pred = y_pred.numpy()
+        # Add .cpu() before .numpy() if tensor might be on GPU
+        if hasattr(y_pred, 'cpu'):
+            y_pred = y_pred.cpu().numpy()
+        else:
+            y_pred = y_pred.numpy()
+
     if y_prob is not None and hasattr(y_prob, 'numpy'):
-        y_prob = y_prob.numpy()
+        # Add .cpu() before .numpy() if tensor might be on GPU
+        if hasattr(y_prob, 'cpu'):
+            y_prob = y_prob.cpu().numpy()
+        else:
+            y_prob = y_prob.numpy()
 
     # Calculate basic metrics
     accuracy = accuracy_score(y_true, y_pred)
@@ -92,9 +106,18 @@ def get_confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray) -> np.ndarray:
     """
     # Convert to numpy arrays if needed
     if hasattr(y_true, 'numpy'):
-        y_true = y_true.numpy()
+        # Add .cpu() before .numpy() if tensor might be on GPU
+        if hasattr(y_true, 'cpu'):
+            y_true = y_true.cpu().numpy()
+        else:
+            y_true = y_true.numpy()
+
     if hasattr(y_pred, 'numpy'):
-        y_pred = y_pred.numpy()
+        # Add .cpu() before .numpy() if tensor might be on GPU
+        if hasattr(y_pred, 'cpu'):
+            y_pred = y_pred.cpu().numpy()
+        else:
+            y_pred = y_pred.numpy()
 
     # Calculate confusion matrix
     cm = confusion_matrix(y_true, y_pred)
@@ -120,9 +143,18 @@ def get_roc_curve_data(y_true: np.ndarray, y_prob: np.ndarray) -> Tuple[np.ndarr
     """
     # Convert to numpy arrays if needed
     if hasattr(y_true, 'numpy'):
-        y_true = y_true.numpy()
+        # Add .cpu() before .numpy() if tensor might be on GPU
+        if hasattr(y_true, 'cpu'):
+            y_true = y_true.cpu().numpy()
+        else:
+            y_true = y_true.numpy()
+
     if hasattr(y_prob, 'numpy'):
-        y_prob = y_prob.numpy()
+        # Add .cpu() before .numpy() if tensor might be on GPU
+        if hasattr(y_prob, 'cpu'):
+            y_prob = y_prob.cpu().numpy()
+        else:
+            y_prob = y_prob.numpy()
 
     # For binary classification
     if y_prob.shape[1] == 2:
@@ -154,9 +186,18 @@ def get_precision_recall_curve_data(y_true: np.ndarray, y_prob: np.ndarray) -> T
     """
     # Convert to numpy arrays if needed
     if hasattr(y_true, 'numpy'):
-        y_true = y_true.numpy()
+        # Add .cpu() before .numpy() if tensor might be on GPU
+        if hasattr(y_true, 'cpu'):
+            y_true = y_true.cpu().numpy()
+        else:
+            y_true = y_true.numpy()
+
     if hasattr(y_prob, 'numpy'):
-        y_prob = y_prob.numpy()
+        # Add .cpu() before .numpy() if tensor might be on GPU
+        if hasattr(y_prob, 'cpu'):
+            y_prob = y_prob.cpu().numpy()
+        else:
+            y_prob = y_prob.numpy()
 
     # For binary classification
     if y_prob.shape[1] == 2:
@@ -246,4 +287,4 @@ def evaluate_model(model, X_test, y_test) -> Dict[str, Any]:
         logger.error(f"Error during model evaluation: {e}")
         raise
 
-
+    

@@ -45,11 +45,19 @@ def extract_feature_importance(model, window_size: int, n_neurons: int) -> np.nd
 
         # Fallback for sklearn-like models
         elif hasattr(model, 'feature_importances_'):
-            importance = model.feature_importances_.reshape(window_size, n_neurons)
+            # Make sure feature_importances_ is a NumPy array
+            if hasattr(model.feature_importances_, 'cpu'):
+                importance = model.feature_importances_.cpu().numpy().reshape(window_size, n_neurons)
+            else:
+                importance = model.feature_importances_.reshape(window_size, n_neurons)
 
         # Handle models with coef_ (like some linear models)
         elif hasattr(model, 'coef_'):
-            importance = np.abs(model.coef_).reshape(window_size, n_neurons)
+            # Make sure coef_ is a NumPy array
+            if hasattr(model.coef_, 'cpu'):
+                importance = np.abs(model.coef_.cpu().numpy()).reshape(window_size, n_neurons)
+            else:
+                importance = np.abs(model.coef_).reshape(window_size, n_neurons)
             importance = importance / importance.sum() if importance.sum() > 0 else importance
 
         else:

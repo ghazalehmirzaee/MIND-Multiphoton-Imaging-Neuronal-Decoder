@@ -1,5 +1,8 @@
 """
-Improved Random Forest model with preprocessing for raw calcium signals.
+Optimized Random Forest model implementation for calcium imaging data.
+
+This implementation focuses on simplicity and effectiveness for decoding behavior
+from calcium imaging data, with proper preprocessing and feature importance extraction.
 """
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
@@ -13,31 +16,57 @@ logger = logging.getLogger(__name__)
 
 class RandomForestModel:
     """
-    Enhanced Random Forest model with preprocessing for calcium imaging signals.
+    Optimized Random Forest model for neural decoding.
+
+    This class provides a wrapper around sklearn's RandomForestClassifier with
+    appropriate preprocessing and methods for feature importance extraction.
     """
 
     def __init__(self,
-                 n_estimators: int = 300,  # Increased for better ensemble
-                 max_depth: int = None,  # Let trees grow deeper
-                 min_samples_split: int = 10,  # Increased to reduce overfitting
-                 min_samples_leaf: int = 5,  # Increased for generalization
-                 max_features: str = 'log2',  # Different feature sampling
-                 class_weight: str = 'balanced',  # Better for standard RF
+                 n_estimators: int = 300,
+                 max_depth: Optional[int] = None,
+                 min_samples_split: int = 5,
+                 min_samples_leaf: int = 2,
+                 max_features: str = 'sqrt',
+                 class_weight: str = 'balanced_subsample',
                  n_jobs: int = -1,
                  random_state: int = 42,
-                 criterion: str = 'entropy',  # Try entropy for better splits
+                 criterion: str = 'gini',
                  bootstrap: bool = True,
-                 use_pca: bool = True,
+                 use_pca: bool = False,  # Changed to False by default
                  pca_variance: float = 0.95,
                  optimize_hyperparams: bool = False):
         """
-        Initialize improved Random Forest with preprocessing.
+        Initialize Random Forest model with preprocessing options.
 
-        Key improvements:
-        - Added PCA for dimensionality reduction
-        - Changed to entropy criterion
-        - Adjusted tree parameters for better generalization
-        - Added data standardization
+        Parameters
+        ----------
+        n_estimators : int, optional
+            Number of trees in the forest, by default 300
+        max_depth : Optional[int], optional
+            Maximum depth of trees, by default None (unlimited)
+        min_samples_split : int, optional
+            Minimum samples required to split a node, by default 5
+        min_samples_leaf : int, optional
+            Minimum samples required in a leaf node, by default 2
+        max_features : str, optional
+            Number of features to consider for best split, by default 'sqrt'
+        class_weight : str, optional
+            Class weights for imbalanced data, by default 'balanced_subsample'
+        n_jobs : int, optional
+            Number of jobs to run in parallel, by default -1 (all CPUs)
+        random_state : int, optional
+            Random seed for reproducibility, by default 42
+        criterion : str, optional
+            Function to measure quality of a split, by default 'gini'
+        bootstrap : bool, optional
+            Whether to use bootstrap samples, by default True
+        use_pca : bool, optional
+            Whether to use PCA for dimensionality reduction, by default False
+        pca_variance : float, optional
+            Explained variance ratio threshold for PCA, by default 0.95
+        optimize_hyperparams : bool, optional
+            Whether to optimize hyperparameters, by default False
         """
         # Store parameters
         self.n_estimators = n_estimators
@@ -73,51 +102,81 @@ class RandomForestModel:
             oob_score=bootstrap
         )
 
-        logger.info(f"Initialized Improved Random Forest with {n_estimators} trees and preprocessing")
+        logger.info(f"Initialized Random Forest with {n_estimators} trees and PCA={use_pca}")
 
     def _prepare_data(self, X, y=None):
-        """Prepare data with proper reshaping."""
+        """
+        Prepare data for model training or inference.
+
+        This method handles conversion from different formats and reshaping.
+
+        Parameters
+        ----------
+        X : torch.Tensor or np.ndarray
+            Input features
+        y : torch.Tensor or np.ndarray, optional
+            Target labels, by default None
+
+        Returns
+        -------
+        Tuple[np.ndarray, np.ndarray or None]
+            Prepared data
+        """
+        # Convert torch tensors to numpy if needed
         if hasattr(X, 'numpy'):
             X = X.numpy()
         if y is not None and hasattr(y, 'numpy'):
             y = y.numpy()
 
-        # Reshape if needed
+        # Reshape if needed (without adding potentially noisy features)
         if X.ndim == 3:
             n_samples, window_size, n_neurons = X.shape
-            # Create additional features from temporal statistics
-            X_flat = X.reshape(n_samples, window_size * n_neurons)
-
-            # Add temporal features (mean, std, max across time for each neuron)
-            X_mean = X.mean(axis=1)
-            X_std = X.std(axis=1)
-            X_max = X.max(axis=1)
-
-            # Concatenate all features
-            X = np.hstack([X_flat, X_mean, X_std, X_max])
+            X = X.reshape(n_samples, window_size * n_neurons)
 
         return X, y
 
     def fit(self, X_train, y_train, X_val=None, y_val=None):
-        """Train the model with preprocessing."""
-        logger.info("Training Improved Random Forest with preprocessing")
+        """
+        Train the Random Forest model.
+
+        Parameters
+        ----------
+        X_train : torch.Tensor or np.ndarray
+            Training features
+        y_train : torch.Tensor or np.ndarray
+            Training labels
+        X_val : torch.Tensor or np.ndarray, optional
+            Validation features, by default None
+        y_val : torch.Tensor or np.ndarray, optional
+            Validation labels, by default None
+
+        Returns
+        -------
+        self
+            Trained model
+        """
+        logger.info("Training Random Forest")
 
         # Prepare data
         X_train, y_train = self._prepare_data(X_train, y_train)
 
-        # Apply preprocessing
+        # Apply preprocessing - standardization
         X_train_scaled = self.scaler.fit_transform(X_train)
 
+        # Apply PCA if requested
         if self.use_pca:
+            n_components = min(self.pca.n_components, X_train_scaled.shape[1])
+            self.pca.n_components = n_components
             X_train_processed = self.pca.fit_transform(X_train_scaled)
-            logger.info(f"PCA reduced dimensions from {X_train_scaled.shape[1]} to {X_train_processed.shape[1]}")
+            logger.info(f"PCA reduced dimensions from {X_train_scaled.shape[1]} to {X_train_processed.shape[1]} "
+                        f"({self.pca.explained_variance_ratio_.sum():.2%} explained variance)")
         else:
             X_train_processed = X_train_scaled
 
         # Train model
         self.model.fit(X_train_processed, y_train)
 
-        # Log OOB score
+        # Log OOB score if available
         if hasattr(self.model, 'oob_score_'):
             logger.info(f"Out-of-bag score: {self.model.oob_score_:.4f}")
 
@@ -137,8 +196,23 @@ class RandomForestModel:
         return self
 
     def predict(self, X):
-        """Make predictions with preprocessing."""
+        """
+        Make predictions with the trained model.
+
+        Parameters
+        ----------
+        X : torch.Tensor or np.ndarray
+            Input features
+
+        Returns
+        -------
+        np.ndarray
+            Predicted labels
+        """
+        # Prepare data
         X, _ = self._prepare_data(X)
+
+        # Apply preprocessing
         X_scaled = self.scaler.transform(X)
 
         if self.use_pca:
@@ -146,11 +220,27 @@ class RandomForestModel:
         else:
             X_processed = X_scaled
 
+        # Make predictions
         return self.model.predict(X_processed)
 
     def predict_proba(self, X):
-        """Predict probabilities with preprocessing."""
+        """
+        Predict class probabilities.
+
+        Parameters
+        ----------
+        X : torch.Tensor or np.ndarray
+            Input features
+
+        Returns
+        -------
+        np.ndarray
+            Predicted class probabilities
+        """
+        # Prepare data
         X, _ = self._prepare_data(X)
+
+        # Apply preprocessing
         X_scaled = self.scaler.transform(X)
 
         if self.use_pca:
@@ -158,24 +248,64 @@ class RandomForestModel:
         else:
             X_processed = X_scaled
 
+        # Predict probabilities
         return self.model.predict_proba(X_processed)
 
     def get_feature_importance(self, window_size: int, n_neurons: int) -> np.ndarray:
-        """Get feature importance (note: will be in PCA space if PCA is used)."""
+        """
+        Get feature importance matrix.
+
+        This method extracts feature importance from the trained model and reshapes
+        it to a matrix of shape (window_size, n_neurons).
+
+        Parameters
+        ----------
+        window_size : int
+            Size of the sliding window
+        n_neurons : int
+            Number of neurons
+
+        Returns
+        -------
+        np.ndarray
+            Feature importance matrix of shape (window_size, n_neurons)
+        """
         if not hasattr(self.model, 'feature_importances_'):
             raise ValueError("Model must be trained before getting feature importance")
 
-        # Return approximate importance in original space
-        importance = self.model.feature_importances_
+        # Get feature importances
+        importances = self.model.feature_importances_
 
-        if self.use_pca and hasattr(self.pca, 'components_'):
-            # Transform back from PCA space (approximate)
-            importance_original = np.abs(self.pca.components_.T @ importance[:self.pca.n_components_])
-            # Take first window_size * n_neurons features (the flattened window)
-            importance_window = importance_original[:window_size * n_neurons]
-            return importance_window.reshape(window_size, n_neurons)
+        if self.use_pca:
+            # When using PCA, we can't directly map back to original features
+            # Create an approximate mapping using PCA components
+            try:
+                # Get PCA components
+                components = self.pca.components_  # shape: (n_components, n_features)
+
+                # Weight components by explained variance ratio
+                weighted_components = components.T * self.pca.explained_variance_ratio_
+
+                # Sum across components to get importance for original features
+                original_importances = np.abs(weighted_components).sum(axis=1)
+
+                # Normalize
+                original_importances = original_importances / original_importances.sum()
+
+                # Reshape to (window_size, n_neurons)
+                importance_matrix = original_importances[:window_size * n_neurons].reshape(window_size, n_neurons)
+
+                return importance_matrix
+            except:
+                # Fallback: use equal importance
+                logger.warning("Could not map PCA feature importance back to original space")
+                importance_matrix = np.ones((window_size, n_neurons)) / (window_size * n_neurons)
+                return importance_matrix
         else:
             # Direct mapping for non-PCA case
-            n_features = window_size * n_neurons
-            return importance[:n_features].reshape(window_size, n_neurons)
+            # Take only the first window_size * n_neurons features
+            n_features = min(len(importances), window_size * n_neurons)
+            importance_matrix = importances[:n_features].reshape(window_size, n_neurons)
+
+            return importance_matrix
 
