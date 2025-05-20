@@ -101,20 +101,39 @@ def create_all_visualizations(
     try:
         logger.info("Creating performance visualizations")
 
-        # Create confusion matrix grid
-        plot_confusion_matrix_grid(results=results, output_dir=perf_dir)
+        # Check if results dictionary has valid structure before proceeding
+        if not results or not any(model in results for model in ['random_forest', 'cnn', 'fcnn', 'svm', 'mlp']):
+            logger.warning("Results dictionary is empty or missing expected models. Skipping performance visualizations.")
+        else:
+            # Create confusion matrix grid
+            try:
+                plot_confusion_matrix_grid(results=results, output_dir=perf_dir)
+            except Exception as e:
+                logger.error(f"Error creating confusion matrix grid: {e}")
 
-        # Create ROC curve grid
-        plot_roc_curve_grid(results=results, output_dir=perf_dir)
+            # Create ROC curve grid
+            try:
+                plot_roc_curve_grid(results=results, output_dir=perf_dir)
+            except Exception as e:
+                logger.error(f"Error creating ROC curve grid: {e}")
 
-        # Create precision-recall curve grid
-        plot_precision_recall_grid(results=results, output_dir=perf_dir)
+            # Create precision-recall curve grid
+            try:
+                plot_precision_recall_grid(results=results, output_dir=perf_dir)
+            except Exception as e:
+                logger.error(f"Error creating precision-recall curve grid: {e}")
 
-        # Create performance radar plot
-        plot_performance_radar(results=results, output_dir=perf_dir)
+            # Create performance radar plot
+            try:
+                plot_performance_radar(results=results, output_dir=perf_dir)
+            except Exception as e:
+                logger.error(f"Error creating performance radar: {e}")
 
-        # Create model performance heatmap
-        plot_model_performance_heatmap(results=results, output_dir=perf_dir)
+            # Create model performance heatmap
+            try:
+                plot_model_performance_heatmap(results=results, output_dir=perf_dir)
+            except Exception as e:
+                logger.error(f"Error creating model performance heatmap: {e}")
 
         logger.info("Performance visualizations created successfully")
     except Exception as e:
@@ -124,14 +143,27 @@ def create_all_visualizations(
     try:
         logger.info("Creating feature importance visualizations")
 
-        # Create feature importance heatmaps
-        plot_feature_importance_heatmaps(results=results, output_dir=feat_dir)
+        # Check if results dictionary has valid models
+        if not results or not any(model in results for model in ['random_forest', 'cnn', 'fcnn', 'svm', 'mlp']):
+            logger.warning("Results dictionary is empty or missing expected models. Skipping feature importance visualizations.")
+        else:
+            # Create feature importance heatmaps
+            try:
+                plot_feature_importance_heatmaps(results=results, output_dir=feat_dir)
+            except Exception as e:
+                logger.error(f"Error creating feature importance heatmaps: {e}")
 
-        # Create temporal importance patterns
-        plot_temporal_importance_patterns(results=results, output_dir=feat_dir)
+            # Create temporal importance patterns
+            try:
+                plot_temporal_importance_patterns(results=results, output_dir=feat_dir)
+            except Exception as e:
+                logger.error(f"Error creating temporal importance patterns: {e}")
 
-        # Create top neuron importance
-        plot_top_neuron_importance(results=results, output_dir=feat_dir)
+            # Create top neuron importance
+            try:
+                plot_top_neuron_importance(results=results, output_dir=feat_dir)
+            except Exception as e:
+                logger.error(f"Error creating top neuron importance: {e}")
 
         logger.info("Feature importance visualizations created successfully")
     except Exception as e:

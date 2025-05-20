@@ -191,10 +191,14 @@ def extract_neuron_importance(model_or_results: Any,
             if isinstance(model_or_results, dict) and 'cnn' in model_or_results:
                 # Extract from results dictionary - test for different model names
                 for model_name in ['cnn', 'random_forest', 'fcnn', 'svm', 'mlp']:
-                    if model_name in model_or_results and signal_type in model_or_results[model_name]:
+                    if (model_name in model_or_results and
+                            signal_type in model_or_results[model_name] and
+                            model_or_results[model_name][signal_type] is not None):
+
+                        # Safely get importance_summary, defaulting to empty dict if not present
                         importance_summary = model_or_results[model_name][signal_type].get('importance_summary', {})
 
-                        if 'neuron_importance' in importance_summary:
+                        if importance_summary is not None and 'neuron_importance' in importance_summary:
                             importance = np.array(importance_summary['neuron_importance'])
 
                             # Make sure importance has the right shape
@@ -647,3 +651,4 @@ def plot_top_neuron_bubbles(
 
         return fig
 
+    
