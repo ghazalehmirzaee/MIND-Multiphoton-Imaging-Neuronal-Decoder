@@ -207,7 +207,19 @@ def train_model(model_type, model_params, datasets, signal_type, window_size, n_
 
         # Log metrics to W&B if requested
         if use_wandb:
-            wandb.log(results.get('metrics', {}))
+            try:
+                # Check if wandb is initialized
+                if wandb.run is None:
+                    # Initialize wandb with a simple run
+                    wandb.init(project="mind-calcium-imaging",
+                               name=f"{model_type}_{signal_type}",
+                               config={"model_type": model_type, "signal_type": signal_type})
+
+                # Now log the metrics
+                wandb.log(results.get('metrics', {}))
+            except Exception as wandb_err:
+                logger.warning(f"Error logging to W&B: {wandb_err}. Continuing without W&B logging.")
+                use_wandb = False  # Disable for the rest of this run
 
         logger.info(f"Model evaluation complete: {results.get('metrics', {})}")
 

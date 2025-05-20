@@ -25,6 +25,12 @@ from mind.visualization.feature_importance import (
     plot_top_neuron_importance
 )
 
+# Import new neuron activity comparison module
+from mind.visualization.neuron_activity_comparison import (
+    analyze_neuron_activity_importance,
+    create_comparison_grid
+)
+
 # Import loader for finding active neurons
 from mind.data.loader import find_most_active_neurons
 
@@ -137,7 +143,25 @@ def create_all_visualizations(
     except Exception as e:
         logger.error(f"Error creating feature importance visualizations: {e}")
 
-    # 4. Neuron-specific visualizations (if mat_file_path provided)
+    # 4. Neuron activity vs. model importance comparison (NEW)
+    if mat_file_path:
+        try:
+            logger.info("Creating neuron activity vs. model importance comparison")
+
+            # Run comprehensive analysis for the two most important models: RF and CNN
+            analyze_neuron_activity_importance(
+                mat_file_path=mat_file_path,
+                results=results,
+                output_dir=str(output_dir),
+                model_names=['random_forest', 'cnn'],
+                top_n=20
+            )
+
+            logger.info("Neuron activity comparison visualizations created successfully")
+        except Exception as e:
+            logger.error(f"Error creating neuron activity comparison: {e}")
+
+    # 5. Neuron-specific visualizations (if mat_file_path provided)
     if mat_file_path:
         try:
             logger.info("Creating neuron-specific visualizations")
@@ -184,30 +208,33 @@ def create_all_visualizations(
     logger.info(f"All visualizations created in {output_dir}")
 
 
-def create_neuron_visualizations_only(
-        calcium_signals: Dict[str, np.ndarray],
-        results: Dict[str, Dict[str, Any]],
+def create_neuron_activity_comparison_only(
         mat_file_path: str,
+        results: Dict[str, Dict[str, Any]],
         output_dir: str,
-        top_n: int = 100
+        model_names: list = ['random_forest', 'cnn'],
+        top_n: int = 20
 ) -> None:
     """
-    Create only neuron-specific visualizations.
+    Create only neuron activity vs. model importance comparison visualizations.
+
+    This function is useful when you want to run just the activity-importance
+    comparison without generating all other visualizations.
 
     Parameters
     ----------
-    calcium_signals : Dict[str, np.ndarray]
-        Dictionary of calcium signals
+    mat_file_path : str
+        Path to MATLAB file with calcium signals and ROI matrix
     results : Dict[str, Dict[str, Any]]
         Results dictionary
-    mat_file_path : str
-        Path to MATLAB file
     output_dir : str
         Output directory
+    model_names : list, optional
+        Models to analyze, by default ['random_forest', 'cnn']
     top_n : int, optional
-        Number of top neurons to visualize, by default 100
+        Number of top neurons to visualize, by default 20
     """
-    logger.info("Creating neuron-specific visualizations only")
+    logger.info("Creating neuron activity vs. model importance comparison only")
 
     # Set publication style
     set_publication_style()
@@ -215,44 +242,31 @@ def create_neuron_visualizations_only(
     # Create output directory
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create neuron analysis directory
     neuron_dir = output_dir / 'neuron_analysis'
     neuron_dir.mkdir(exist_ok=True)
 
-    # Create neuron visualizations
-    try:
-        # Import visualization functions
-        from mind.visualization.neuron_importance import plot_top_neuron_bubbles
+    # Run comprehensive analysis
+    analysis_results = analyze_neuron_activity_importance(
+        mat_file_path=mat_file_path,
+        results=results,
+        output_dir=str(output_dir),
+        model_names=model_names,
+        top_n=top_n
+    )
 
-        # Create neuron bubble charts
-        plot_top_neuron_bubbles(
-            mat_file_path=mat_file_path,
-            model_or_results=results,
-            top_n=top_n,
-            output_path=str(neuron_dir / f"top_{top_n}_neurons.png"),
-            show_plot=False
-        )
+    # Create comparison grid
+    create_comparison_grid(
+        mat_file_path=mat_file_path,
+        model_or_results=results,
+        output_dir=str(neuron_dir),
+        model_names=model_names,
+        top_n=top_n,
+        show_plot=False
+    )
 
-        # Try to create Venn diagram
-        try:
-            from mind.visualization.neuron_overlap import create_neuron_venn_diagram
+    logger.info(f"Neuron activity comparison visualizations created in {neuron_dir}")
 
-            create_neuron_venn_diagram(
-                mat_file_path=mat_file_path,
-                model_or_results=results,
-                top_n=top_n,
-                output_path=str(neuron_dir / f"venn_diagram_top_{top_n}.png"),
-                show_plot=False
-            )
-        except ImportError:
-            logger.warning("matplotlib_venn is not available. Skipping Venn diagram visualization.")
-        except Exception as e:
-            logger.error(f"Error creating Venn diagram: {e}")
-
-        logger.info("Neuron-specific visualizations created successfully")
-    except ImportError:
-        logger.error("Could not import neuron visualization modules")
-    except Exception as e:
-        logger.error(f"Error creating neuron visualizations: {e}")
-
-    logger.info(f"Neuron visualizations created in {output_dir}")
+    return analysis_results
 
