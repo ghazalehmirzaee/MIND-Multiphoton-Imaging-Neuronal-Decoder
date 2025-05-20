@@ -445,4 +445,3 @@ def create_neuron_venn_diagram(
 
         return fig
 
-    
