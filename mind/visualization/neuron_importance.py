@@ -651,4 +651,3 @@ def plot_top_neuron_bubbles(
 
         return fig
 
-    

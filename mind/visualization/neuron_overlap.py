@@ -242,15 +242,19 @@ def plot_neuron_venn_diagram(
         'ABC': '#FFD700'  # Gold
     }
 
-    # Plot bubbles for neurons in each region
+    # Default bubble size
     bubble_size = 0.35
 
+    # Plot bubbles for neurons in each region
     # Function to plot neurons for a specific region
     def plot_region_neurons(neurons, region_key, center_pos):
         if len(neurons) == 0:
             return
 
         neurons_list = sorted(list(neurons))
+
+        # Define local bubble size for this region
+        local_bubble_size = bubble_size
 
         # Adjust spacing based on number of neurons
         if len(neurons_list) <= 4:
@@ -259,7 +263,7 @@ def plot_neuron_venn_diagram(
             spacing = 0.7
         else:
             spacing = 0.6
-            bubble_size = 0.3
+            local_bubble_size = 0.3  # Modify local copy
 
         # Get positions for bubbles
         bubble_positions = arrange_bubbles_in_grid(
@@ -271,7 +275,7 @@ def plot_neuron_venn_diagram(
                 x, y = bubble_positions[idx]
                 create_neuron_bubble(ax, x, y, neuron_id,
                                      color=bubble_colors[region_key],
-                                     size=bubble_size)
+                                     size=local_bubble_size)
 
     # Plot neurons for each region
     plot_region_neurons(only_calcium, 'A', positions['A'])
@@ -441,3 +445,4 @@ def create_neuron_venn_diagram(
 
         return fig
 
+    
