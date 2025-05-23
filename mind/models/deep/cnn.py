@@ -166,4 +166,3 @@ class CNNWrapper:
             data = data.clone().detach()
         return data.to(self.device)
 
-    
