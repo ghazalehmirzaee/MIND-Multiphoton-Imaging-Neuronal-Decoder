@@ -71,4 +71,3 @@ class RandomForestModel:
         importance = self.model.feature_importances_
         return importance.reshape(window_size, n_neurons)
 
-    
