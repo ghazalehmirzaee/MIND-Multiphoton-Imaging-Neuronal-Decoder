@@ -10,7 +10,7 @@ import numpy as np
 
 from mind.data.loader import find_most_active_neurons
 from .config import set_publication_style
-from .signals import plot_signal_comparison_top20
+from .signals import plot_signal_comparison_top
 from .performance import (
     plot_confusion_matrix_grid,
     plot_roc_curve_grid,
@@ -39,7 +39,7 @@ def create_all_visualizations(
     with consistent color coding and styling throughout.
 
     Required visualizations:
-    1. Signal comparisons for top 20 neurons
+    1. Signal comparisons for top 5 neurons
     2. Confusion matrices (5x3 grid)
     3. ROC curves (5x3 grid)
     4. Performance radar plots
@@ -82,13 +82,13 @@ def create_all_visualizations(
     for subdir in subdirs.values():
         subdir.mkdir(parents=True, exist_ok=True)
 
-    # 1. Signal comparisons for top 20 neurons
+    # 1. Signal comparisons for top 5 neurons
     try:
-        logger.info("Creating signal comparison for top 20 neurons...")
-        top_20_indices = find_most_active_neurons(calcium_signals, 20)
-        plot_signal_comparison_top20(
+        logger.info("Creating signal comparison for top 5 neurons...")
+        top_indices = find_most_active_neurons(calcium_signals, 5)
+        plot_signal_comparison_top(
             calcium_signals,
-            top_20_indices,
+            top_indices,
             output_dir=subdirs['signals']
         )
     except Exception as e:
@@ -195,7 +195,7 @@ def create_visualization_summary(
         f.write("- ΔF/F: Green (#4c8b64)\n")
         f.write("- Deconvolved: Red (#a85858)\n\n")
         f.write("Generated Figures:\n")
-        f.write("-" * 20 + "\n\n")
+        f.write("-" * 5 + "\n\n")
 
         for category, subdir in subdirs.items():
             f.write(f"{category.replace('_', ' ').title()}:\n")
