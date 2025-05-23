@@ -114,7 +114,149 @@ def get_top_active_neurons(activity_sums: Dict[str, np.ndarray], top_n: int = 20
     return top_active_neurons
 
 
-def calculate_overlap_metrics(model_important_neurons: Dict[str, Dict[str, np.ndarray]],
+def extract_importance_values_from_results(results: Dict[str, Dict[str, Any]],
+                                         model_name: str,
+                                         signal_type: str,
+                                         n_neurons: int) -> Optional[np.ndarray]:
+    """
+    Extract importance values from model results.
+
+    This function tries to extract neuron importance values directly from the results
+    dictionary rather than estimating or simulating them.
+
+    Parameters
+    ----------
+    results : Dict[str, Dict[str, Any]]
+        Results dictionary
+    model_name : str
+        Name of the model
+    signal_type : str
+        Type of signal
+    n_neurons : int
+        Total number of neurons
+
+    Returns
+    -------
+    Optional[np.ndarray]
+        Array of importance values for each neuron, or None if not available
+    """
+    # Check if model exists in results
+    if model_name not in results:
+        logger.warning(f"Model {model_name} not found in results")
+        return None
+
+    # Check if signal type exists for this model
+    if signal_type not in results[model_name]:
+        logger.warning(f"Signal type {signal_type} not found for model {model_name}")
+        return None
+
+    # Try to get importance from importance_summary
+    try:
+        importance_summary = results[model_name][signal_type].get('importance_summary', {})
+
+        # First try to get neuron importance directly
+        if 'neuron_importance' in importance_summary:
+            importance = np.array(importance_summary['neuron_importance'])
+            if len(importance) == n_neurons:
+                logger.info(f"Extracted neuron importance from results for {model_name} - {signal_type}")
+                return importance
+
+        # If not available, try to get importance matrix and calculate neuron importance
+        if 'importance_matrix' in importance_summary:
+            importance_matrix = np.array(importance_summary['importance_matrix'])
+            # Calculate neuron importance by averaging across time
+            neuron_importance = importance_matrix.mean(axis=0)
+            if len(neuron_importance) == n_neurons:
+                logger.info(f"Calculated neuron importance from importance matrix for {model_name} - {signal_type}")
+                return neuron_importance
+
+    except Exception as e:
+        logger.warning(f"Error extracting importance from results: {e}")
+
+    logger.warning(f"Could not extract importance values for {model_name} - {signal_type}")
+    return None
+
+
+def get_model_importance(results: Dict[str, Dict[str, Any]],
+                        calcium_signals: Dict[str, np.ndarray],
+                        model_name: str,
+                        top_n: int = 20) -> Dict[str, Tuple[np.ndarray, np.ndarray]]:
+    """
+    Get importance values and top neurons for a specific model.
+
+    Parameters
+    ----------
+    results : Dict[str, Dict[str, Any]]
+        Results dictionary
+    calcium_signals : Dict[str, np.ndarray]
+        Dictionary of calcium signals
+    model_name : str
+        Name of the model
+    top_n : int, optional
+        Number of top neurons to return, by default 20
+
+    Returns
+    -------
+    Dict[str, Tuple[np.ndarray, np.ndarray]]
+        Dictionary mapping signal type to (importance, top_indices)
+    """
+    importance_dict = {}
+
+    for signal_type, signal in calcium_signals.items():
+        if signal is None:
+            continue
+
+        n_neurons = signal.shape[1]
+
+        # Extract importance values from results
+        importance = extract_importance_values_from_results(results, model_name, signal_type, n_neurons)
+
+        if importance is not None:
+            # Get top neuron indices
+            top_indices = np.argsort(importance)[::-1][:top_n]
+            importance_dict[signal_type] = (importance, top_indices)
+            logger.info(f"Extracted top {top_n} neurons for {model_name} - {signal_type}")
+        else:
+            # For models like SVM where importance might not be available,
+            # try to use feature_importance extraction functions
+            try:
+                # Get model object if available (usually for deep learning models)
+                if 'model' in results[model_name][signal_type]:
+                    model = results[model_name][signal_type]['model']
+                    # If model has get_feature_importance method
+                    if hasattr(model, 'get_feature_importance'):
+                        # Get importance matrix
+                        importance_matrix = model.get_feature_importance(signal.shape[0], n_neurons)
+                        # Calculate neuron importance by averaging across time
+                        neuron_importance = importance_matrix.mean(axis=0)
+                        # Get top indices
+                        top_indices = np.argsort(neuron_importance)[::-1][:top_n]
+                        importance_dict[signal_type] = (neuron_importance, top_indices)
+                        logger.info(f"Extracted importance from model for {model_name} - {signal_type}")
+                        continue
+            except Exception as e:
+                logger.warning(f"Error extracting importance from model: {e}")
+
+            # If we still don't have importance, look for top_100_neurons in results
+            try:
+                if 'top_100_neurons' in results[model_name][signal_type]:
+                    top_neurons = np.array(results[model_name][signal_type]['top_100_neurons'])
+                    # Create importance array with high values for top neurons
+                    importance = np.zeros(n_neurons)
+                    # Only use the top N neurons
+                    if len(top_neurons) > top_n:
+                        top_neurons = top_neurons[:top_n]
+                    importance[top_neurons] = 1.0
+                    importance_dict[signal_type] = (importance, top_neurons)
+                    logger.info(f"Using top_100_neurons from results for {model_name} - {signal_type}")
+                    continue
+            except Exception as e:
+                logger.warning(f"Error extracting top neurons from results: {e}")
+
+    return importance_dict
+
+
+def calculate_overlap_metrics(model_important_neurons: Dict[str, Dict[str, Tuple[np.ndarray, np.ndarray]]],
                               top_active_neurons: Dict[str, np.ndarray],
                               top_n: int = 20) -> Dict[str, Dict[str, Dict[str, Any]]]:
     """
@@ -122,8 +264,8 @@ def calculate_overlap_metrics(model_important_neurons: Dict[str, Dict[str, np.nd
 
     Parameters
     ----------
-    model_important_neurons : Dict[str, Dict[str, np.ndarray]]
-        Dictionary mapping model name to a dictionary mapping signal type to array of important neuron indices
+    model_important_neurons : Dict[str, Dict[str, Tuple[np.ndarray, np.ndarray]]]
+        Dictionary mapping model name to a dictionary mapping signal type to (importance, top_indices)
     top_active_neurons : Dict[str, np.ndarray]
         Dictionary mapping signal type to array of top active neuron indices
     top_n : int, optional
@@ -139,13 +281,28 @@ def calculate_overlap_metrics(model_important_neurons: Dict[str, Dict[str, np.nd
     for model_name, signal_importance in model_important_neurons.items():
         overlap_metrics[model_name] = {}
 
-        for signal_type, important_indices in signal_importance.items():
+        for signal_type, importance_data in signal_importance.items():
             if signal_type not in top_active_neurons:
                 continue
 
-            # Convert NumPy arrays to Python lists before creating sets (fixes hashability issue)
-            important_indices_list = important_indices[:top_n].tolist()
-            active_indices_list = top_active_neurons[signal_type][:top_n].tolist()
+            # Extract importance values and top indices
+            if isinstance(importance_data, tuple) and len(importance_data) == 2:
+                importance_values, important_indices = importance_data
+            else:
+                logger.warning(f"Unexpected format for importance data: {type(importance_data)}")
+                continue
+
+            # Convert to lists before creating sets
+            # Handle both arrays and lists
+            if hasattr(important_indices, 'tolist'):
+                important_indices_list = important_indices[:top_n].tolist()
+            else:
+                important_indices_list = list(important_indices[:top_n])
+
+            if hasattr(top_active_neurons[signal_type], 'tolist'):
+                active_indices_list = top_active_neurons[signal_type][:top_n].tolist()
+            else:
+                active_indices_list = list(top_active_neurons[signal_type][:top_n])
 
             # Get sets of important and active neurons
             important_set = set(important_indices_list)
@@ -182,7 +339,7 @@ def plot_neuron_scatter(ax, positions, highlighted_indices, color, roi_matrix=No
         The axes to plot on
     positions : np.ndarray
         Array of (x, y) positions for each neuron
-    highlighted_indices : np.ndarray
+    highlighted_indices : np.ndarray or list
         Indices of neurons to highlight
     color : str
         Color for the highlighted neurons
@@ -208,13 +365,19 @@ def plot_neuron_scatter(ax, positions, highlighted_indices, color, roi_matrix=No
 
     # Plot highlighted positions with specified color and marker
     if len(highlighted_indices) > 0:
-        highlighted_positions = positions[highlighted_indices]
+        # Convert indices to list if they're not already
+        if hasattr(highlighted_indices, 'tolist'):
+            indices_list = highlighted_indices.tolist()
+        else:
+            indices_list = list(highlighted_indices)
+
+        highlighted_positions = positions[indices_list]
         ax.scatter(highlighted_positions[:, 0], highlighted_positions[:, 1],
                    s=marker_size, color=color, marker=marker, alpha=alpha,
                    label=highlight_label, linewidths=1.5, edgecolors='white')
 
         # Add labels for the top 5 neurons
-        for i, idx in enumerate(highlighted_indices[:5]):
+        for i, idx in enumerate(indices_list[:5]):
             ax.text(positions[idx, 0], positions[idx, 1], f"#{idx}",
                     fontsize=8, color='black', fontweight='bold',
                     ha='center', va='bottom',
@@ -234,9 +397,9 @@ def create_side_by_side_comparison(positions, model_important_indices, active_in
     ----------
     positions : np.ndarray
         Array of (x, y) positions for each neuron
-    model_important_indices : np.ndarray
+    model_important_indices : np.ndarray or list
         Indices of neurons deemed important by the model
-    active_indices : np.ndarray
+    active_indices : np.ndarray or list
         Indices of most active neurons
     signal_type : str
         Type of signal ('calcium_signal', 'deltaf_signal', or 'deconv_signal')
@@ -258,9 +421,16 @@ def create_side_by_side_comparison(positions, model_important_indices, active_in
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
 
     # Calculate overlap
-    # Convert NumPy arrays to lists before creating sets
-    model_list = model_important_indices[:top_n].tolist()
-    active_list = active_indices[:top_n].tolist()
+    # Convert to lists before creating sets
+    if hasattr(model_important_indices, 'tolist'):
+        model_list = model_important_indices[:top_n].tolist()
+    else:
+        model_list = list(model_important_indices[:top_n])
+
+    if hasattr(active_indices, 'tolist'):
+        active_list = active_indices[:top_n].tolist()
+    else:
+        active_list = list(active_indices[:top_n])
 
     model_set = set(model_list)
     active_set = set(active_list)
@@ -307,7 +477,7 @@ def plot_model_activity_comparison(
         calcium_signals: Dict[str, np.ndarray],
         excluded_cells: np.ndarray,
         roi_matrix: np.ndarray,
-        model_or_results: Any,
+        model_importance: Dict[str, Tuple[np.ndarray, np.ndarray]],
         signal_type: str,
         model_name: str = 'random_forest',
         top_n: int = 20,
@@ -325,8 +495,8 @@ def plot_model_activity_comparison(
         Array of excluded cell indices
     roi_matrix : np.ndarray
         ROI matrix for visualization
-    model_or_results : Any
-        Model or results dictionary containing importance information
+    model_importance : Dict[str, Tuple[np.ndarray, np.ndarray]]
+        Dictionary mapping signal type to (importance, top_indices)
     signal_type : str
         Type of signal to analyze ('calcium_signal', 'deltaf_signal', or 'deconv_signal')
     model_name : str, optional
@@ -355,15 +525,12 @@ def plot_model_activity_comparison(
     # Calculate neuron positions
     positions = approximate_neuron_positions(roi_matrix, n_neurons)
 
-    # Extract model-important neurons
-    importance_dict = extract_neuron_importance(model_or_results, calcium_signals, top_n)
-
-    if signal_type not in importance_dict:
+    if signal_type not in model_importance:
         logger.error(f"Could not extract importance for {signal_type}")
         return None
 
     # Get model-important neuron indices
-    _, model_important_indices = importance_dict[signal_type]
+    _, model_important_indices = model_importance[signal_type]
 
     # Calculate neuron activity sums
     activity_sums = calculate_neuron_activity(calcium_signals)
@@ -410,102 +577,9 @@ def plot_model_activity_comparison(
     return fig
 
 
-def create_all_comparisons(
-        mat_file_path: str,
-        model_or_results: Any,
-        output_dir: str,
-        model_name: str = 'random_forest',
-        top_n: int = 20,
-        show_plot: bool = False
-) -> List[plt.Figure]:
-    """
-    Create comparison visualizations for all signal types.
-
-    Parameters
-    ----------
-    mat_file_path : str
-        Path to MATLAB file with calcium signals and ROI matrix
-    model_or_results : Any
-        Model or results dictionary
-    output_dir : str
-        Directory to save figures
-    model_name : str, optional
-        Name of model to analyze, by default 'random_forest'
-    top_n : int, optional
-        Number of top neurons to consider, by default 20
-    show_plot : bool, optional
-        Whether to display plots, by default False
-
-    Returns
-    -------
-    List[plt.Figure]
-        List of created figures
-    """
-    # Load data
-    calcium_signals, roi_matrix, excluded_cells = load_data(mat_file_path)
-
-    # Create output directory
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Generate figures for each signal type
-    figures = []
-
-    for signal_type in ['calcium_signal', 'deltaf_signal', 'deconv_signal']:
-        if signal_type in calcium_signals and calcium_signals[signal_type] is not None:
-            output_path = output_dir / f"{model_name}_{signal_type}_comparison.png"
-
-            fig = plot_model_activity_comparison(
-                calcium_signals=calcium_signals,
-                excluded_cells=excluded_cells,
-                roi_matrix=roi_matrix,
-                model_or_results=model_or_results,
-                signal_type=signal_type,
-                model_name=model_name,
-                top_n=top_n,
-                output_path=str(output_path),
-                show_plot=show_plot
-            )
-
-            if fig is not None:
-                figures.append(fig)
-
-    # Calculate and log comprehensive overlap metrics
-    if len(figures) > 0:
-        # Extract model importance for all signal types
-        model_importance = {model_name: extract_neuron_importance(model_or_results, calcium_signals, top_n)}
-
-        # Calculate activity sums and get top active neurons
-        activity_sums = calculate_neuron_activity(calcium_signals)
-        top_active_neurons = get_top_active_neurons(activity_sums, top_n)
-
-        # Calculate overlap metrics
-        overlap_metrics = calculate_overlap_metrics(model_importance, top_active_neurons, top_n)
-
-        # Save metrics as text file
-        metrics_path = output_dir / f"{model_name}_overlap_metrics.txt"
-        with open(metrics_path, 'w') as f:
-            f.write(f"Overlap Metrics: {model_name.upper()} vs. Most Active Neurons\n")
-            f.write("=" * 50 + "\n\n")
-
-            for signal_type, metrics in overlap_metrics.get(model_name, {}).items():
-                signal_name = SIGNAL_DISPLAY_NAMES.get(signal_type, signal_type)
-                f.write(f"{signal_name} Signal:\n")
-                f.write("-" * 30 + "\n")
-                f.write(f"Overlap: {metrics['overlap_count']} of {top_n} neurons ")
-                f.write(f"({metrics['overlap_percentage']:.1f}%)\n")
-                f.write(f"Overlapping neurons: {metrics['overlap_neurons']}\n")
-                f.write(f"Model-important only: {metrics['important_only']}\n")
-                f.write(f"Active-only: {metrics['active_only']}\n\n")
-
-        logger.info(f"Saved overlap metrics to {metrics_path}")
-
-    return figures
-
-
 def create_comparison_grid(
         mat_file_path: str,
-        model_or_results: Any,
+        results: Dict[str, Dict[str, Any]],
         output_dir: str,
         model_names: List[str] = ['random_forest', 'cnn'],
         top_n: int = 20,
@@ -518,8 +592,8 @@ def create_comparison_grid(
     ----------
     mat_file_path : str
         Path to MATLAB file with calcium signals and ROI matrix
-    model_or_results : Any
-        Model or results dictionary
+    results : Dict[str, Dict[str, Any]]
+        Results dictionary
     output_dir : str
         Directory to save figure
     model_names : List[str], optional
@@ -551,7 +625,7 @@ def create_comparison_grid(
     # Extract model importance for all models and signal types
     model_importance = {}
     for model_name in model_names:
-        model_importance[model_name] = extract_neuron_importance(model_or_results, calcium_signals, top_n)
+        model_importance[model_name] = get_model_importance(results, calcium_signals, model_name, top_n)
 
     # Calculate activity sums and get top active neurons
     activity_sums = calculate_neuron_activity(calcium_signals)
@@ -591,7 +665,14 @@ def create_comparison_grid(
 
             # Get model-important neuron indices
             if model_name in model_importance and signal_type in model_importance[model_name]:
-                _, model_important_indices = model_importance[model_name][signal_type]
+                importance_data = model_importance[model_name][signal_type]
+                if isinstance(importance_data, tuple) and len(importance_data) == 2:
+                    _, model_important_indices = importance_data
+                else:
+                    ax.text(0.5, 0.5, f"Invalid importance data for {model_name}",
+                           ha='center', va='center', transform=ax.transAxes)
+                    ax.axis('off')
+                    continue
             else:
                 ax.text(0.5, 0.5, f"No importance data for {model_name}",
                         ha='center', va='center', transform=ax.transAxes)
@@ -611,9 +692,16 @@ def create_comparison_grid(
             signal_color = SIGNAL_COLORS[signal_type]
 
             # Calculate overlap
-            # Convert NumPy arrays to lists before creating sets
-            model_list = model_important_indices[:top_n].tolist()
-            active_list = active_indices[:top_n].tolist()
+            # Convert to lists before creating sets
+            if hasattr(model_important_indices, 'tolist'):
+                model_list = model_important_indices[:top_n].tolist()
+            else:
+                model_list = list(model_important_indices[:top_n])
+
+            if hasattr(active_indices, 'tolist'):
+                active_list = active_indices[:top_n].tolist()
+            else:
+                active_list = list(active_indices[:top_n])
 
             model_set = set(model_list)
             active_set = set(active_list)
@@ -631,13 +719,23 @@ def create_comparison_grid(
             ax.scatter(positions[:, 0], positions[:, 1], s=5, color='gray', alpha=0.3)
 
             # Plot model-important neurons as circles
-            model_positions = positions[model_important_indices[:top_n]]
+            if hasattr(model_important_indices, 'tolist'):
+                model_indices = model_important_indices[:top_n].tolist()
+            else:
+                model_indices = list(model_important_indices[:top_n])
+
+            model_positions = positions[model_indices]
             ax.scatter(model_positions[:, 0], model_positions[:, 1],
                       s=50, color=signal_color, marker='o', alpha=0.6,
                       label='Model Important', edgecolors='white', linewidths=0.5)
 
             # Plot active neurons as x markers
-            active_positions = positions[active_indices[:top_n]]
+            if hasattr(active_indices, 'tolist'):
+                active_list = active_indices[:top_n].tolist()
+            else:
+                active_list = list(active_indices[:top_n])
+
+            active_positions = positions[active_list]
             ax.scatter(active_positions[:, 0], active_positions[:, 1],
                       s=50, color='black', marker='x', alpha=0.7,
                       label='Most Active', linewidths=1.5)
@@ -775,10 +873,7 @@ def analyze_neuron_activity_importance(
     # Extract model importance for each model and signal type
     model_importance = {}
     for model_name in model_names:
-        if model_name in results:
-            model_importance[model_name] = extract_neuron_importance(results, calcium_signals, top_n)
-        else:
-            logger.warning(f"Model {model_name} not found in results")
+        model_importance[model_name] = get_model_importance(results, calcium_signals, model_name, top_n)
 
     # Calculate overlap metrics
     overlap_metrics = calculate_overlap_metrics(model_importance, top_active_neurons, top_n)
@@ -786,7 +881,7 @@ def analyze_neuron_activity_importance(
     # Generate grid visualization
     grid_fig = create_comparison_grid(
         mat_file_path=mat_file_path,
-        model_or_results=results,
+        results=results,
         output_dir=neuron_dir,
         model_names=model_names,
         top_n=top_n,
@@ -796,16 +891,16 @@ def analyze_neuron_activity_importance(
     # Generate individual visualizations for each model and signal type
     individual_figs = []
     for model_name in model_names:
-        if model_name in results:
+        if model_name in model_importance:
             for signal_type in ['calcium_signal', 'deltaf_signal', 'deconv_signal']:
-                if signal_type in calcium_signals and calcium_signals[signal_type] is not None:
+                if signal_type in calcium_signals and calcium_signals[signal_type] is not None and signal_type in model_importance[model_name]:
                     output_path = neuron_dir / f"{model_name}_{signal_type}_comparison.png"
 
                     fig = plot_model_activity_comparison(
                         calcium_signals=calcium_signals,
                         excluded_cells=excluded_cells,
                         roi_matrix=roi_matrix,
-                        model_or_results=results,
+                        model_importance=model_importance[model_name],
                         signal_type=signal_type,
                         model_name=model_name,
                         top_n=top_n,
@@ -824,20 +919,22 @@ def analyze_neuron_activity_importance(
 
             for signal_type in activity_sums.keys():
                 if signal_type in model_importance[model_name]:
-                    importance_values, _ = model_importance[model_name][signal_type]
-                    activity_values = activity_sums[signal_type]
+                    importance_data = model_importance[model_name][signal_type]
+                    if isinstance(importance_data, tuple) and len(importance_data) == 2:
+                        importance_values, _ = importance_data
+                        activity_values = activity_sums[signal_type]
 
-                    # Ensure arrays have the same length
-                    min_length = min(len(importance_values), len(activity_values))
-                    importance_values = importance_values[:min_length]
-                    activity_values = activity_values[:min_length]
+                        # Ensure arrays have the same length
+                        min_length = min(len(importance_values), len(activity_values))
+                        importance_values = importance_values[:min_length]
+                        activity_values = activity_values[:min_length]
 
-                    # Calculate correlation
-                    if np.any(importance_values) and np.any(activity_values):
-                        correlation = np.corrcoef(importance_values, activity_values)[0, 1]
-                        correlation_results[model_name][signal_type] = correlation
+                        # Calculate correlation
+                        if np.any(importance_values) and np.any(activity_values):
+                            correlation = np.corrcoef(importance_values, activity_values)[0, 1]
+                            correlation_results[model_name][signal_type] = correlation
 
-                        logger.info(f"{model_name} {signal_type} correlation: {correlation:.4f}")
+                            logger.info(f"{model_name} {signal_type} correlation: {correlation:.4f}")
 
     # Create correlation visualization
     corr_fig = plt.figure(figsize=(10, 6))
