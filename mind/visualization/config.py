@@ -53,10 +53,7 @@ FIGURE_SIZES = {
 
 def set_publication_style():
     """
-    Set publication-quality plot styling.
-
-    This function configures matplotlib to produce plots with a consistent,
-    professional appearance suitable for scientific publications.
+    This function configures matplotlib to produce plots with a consistent appearance.
     """
     plt.style.use('seaborn-v0_8-white')
     sns.set_style("white")
@@ -80,16 +77,6 @@ def set_publication_style():
 def get_signal_colormap(signal_type):
     """
     Get a custom colormap for a specific signal type.
-
-    Parameters
-    ----------
-    signal_type : str
-        Signal type ('calcium_signal', 'deltaf_signal', or 'deconv_signal')
-
-    Returns
-    -------
-    matplotlib.colors.LinearSegmentedColormap
-        Custom colormap for the signal type
     """
     from matplotlib.colors import LinearSegmentedColormap
 

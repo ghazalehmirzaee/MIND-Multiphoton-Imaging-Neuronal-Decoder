@@ -1,8 +1,10 @@
+# mind/visualization/comprehensive_viz.py
 """
 Comprehensive visualization module for calcium imaging data.
 
 This is the main entry point for creating all visualizations,
 orchestrating the different visualization components.
+Note: Feature importance heatmap functionality has been removed as requested.
 """
 from pathlib import Path
 import logging
@@ -20,7 +22,7 @@ from mind.visualization.performance import (
     plot_model_performance_heatmap
 )
 from mind.visualization.feature_importance import (
-    plot_feature_importance_heatmaps,
+    # Removed plot_feature_importance_heatmaps import as requested
     plot_temporal_importance_patterns,
     plot_top_neuron_importance
 )
@@ -46,19 +48,6 @@ def create_all_visualizations(
 ) -> None:
     """
     Create all visualizations with modular organization and error handling.
-
-    Parameters
-    ----------
-    results : Dict[str, Dict[str, Any]]
-        Results dictionary organized by model and signal type
-    calcium_signals : Dict[str, np.ndarray]
-        Dictionary of calcium signals
-    output_dir : str
-        Directory to save visualizations
-    mat_file_path : Optional[str], optional
-        Path to MATLAB file for neuron visualizations, by default None
-    top_n : int, optional
-        Number of top neurons to visualize, by default 100
     """
     logger.info("Starting comprehensive visualization creation")
 
@@ -130,20 +119,20 @@ def create_all_visualizations(
     try:
         logger.info("Creating feature importance visualizations")
 
-        # Create feature importance heatmaps
-        plot_feature_importance_heatmaps(results=results, output_dir=feat_dir)
+        # Note: Feature importance heatmaps have been removed as requested
+        # Only create temporal importance patterns and top neuron importance
 
         # Create temporal importance patterns
         plot_temporal_importance_patterns(results=results, output_dir=feat_dir)
 
-        # Create top neuron importance
+        # Create top neuron importance (with simplified labeling)
         plot_top_neuron_importance(results=results, output_dir=feat_dir)
 
         logger.info("Feature importance visualizations created successfully")
     except Exception as e:
         logger.error(f"Error creating feature importance visualizations: {e}")
 
-    # 5. Neuron-specific visualizations with SEPARATE FIGURES (MODIFIED)
+    # 4. Neuron-specific visualizations with SEPARATE FIGURES (if mat_file_path provided)
     if mat_file_path:
         try:
             logger.info("Creating neuron-specific visualizations with separate figures for each model and signal")
@@ -197,7 +186,8 @@ def create_all_visualizations(
 
 def create_visualization_summary(output_dir: Path):
     """
-    Create a summary file listing all generated visualizations including the new separate neuron figures.
+    Create a summary file listing all generated visualizations.
+    Note: Feature importance heatmaps are no longer included.
     """
     summary_path = output_dir / 'visualization_summary.txt'
 
@@ -217,7 +207,7 @@ def create_visualization_summary(output_dir: Path):
         subdirs = {
             'signals': 'Signal Comparisons',
             'performance': 'Performance Metrics',
-            'feature_importance': 'Feature Importance',
+            'feature_importance': 'Feature Importance (Temporal & Neuron Analysis)',
             'neuron_analysis': 'Neuron Analysis'
         }
 
@@ -243,21 +233,19 @@ def create_visualization_summary(output_dir: Path):
 
                 f.write("\n")
 
-        f.write("\nNEW: Separate Neuron Importance Visualizations\n")
+        f.write("\nNOTE: Feature Importance Heatmaps Removed\n")
         f.write("-" * 45 + "\n")
-        f.write("Individual figures have been created for each model and signal type combination:\n")
-        f.write("- 9 total figures (3 models × 3 signal types)\n")
-        f.write("- No neuron indices for cleaner scientific presentation\n")
-        f.write("- Intelligent cropping to focus on relevant neuron regions\n")
-        f.write("- Bubble size indicates neuron importance for movement prediction\n")
-        f.write("\nLocation: neuron_analysis/[model_name]/[model]_[signal]_top100_neurons.png\n")
+        f.write("The feature importance heatmap visualization has been removed as requested.\n")
+        f.write("Only temporal importance patterns and top neuron importance plots are now generated.\n")
+        f.write("The top neuron importance plot now uses simplified ranking labels (#1, #2, etc.)\n")
+        f.write("instead of specific neuron IDs, and only the first subplot shows the 'Neuron Rank' label.\n\n")
 
         f.write("\nVisualization Details:\n")
         f.write("-" * 5 + "\n")
         f.write("1. Signal Comparisons: Shows top 5 active neurons across all three signal types\n")
         f.write("2. Performance Metrics: Confusion matrices, ROC curves, PR curves, and radar plots\n")
-        f.write("3. Feature Importance: Temporal patterns and neuron-specific importance\n")
-        f.write("4. Neuron Analysis: Individual figures for top 100 neurons per model/signal combination\n")
+        f.write("3. Feature Importance: Temporal patterns and simplified neuron rankings\n")
+        f.write("4. Neuron Analysis: Individual figures for top neurons per model/signal combination\n")
 
     logger.info(f"Created visualization summary at {summary_path}")
 
@@ -274,19 +262,6 @@ def create_neuron_activity_comparison_only(
 
     This function is useful when you want to run just the activity-importance
     comparison without generating all other visualizations.
-
-    Parameters
-    ----------
-    mat_file_path : str
-        Path to MATLAB file with calcium signals and ROI matrix
-    results : Dict[str, Dict[str, Any]]
-        Results dictionary
-    output_dir : str
-        Output directory
-    model_names : list, optional
-        Models to analyze, by default ['random_forest', 'cnn']
-    top_n : int, optional
-        Number of top neurons to visualize
     """
     logger.info("Creating neuron activity vs. model importance comparison only")
 
@@ -323,5 +298,4 @@ def create_neuron_activity_comparison_only(
     logger.info(f"Neuron activity comparison visualizations created in {neuron_dir}")
 
     return analysis_results
-
 

@@ -19,7 +19,7 @@ python -m venv env
 source env/bin/activate  # On Windows: env\Scripts\activate
 
 # Install the package and dependencies
-pip install -e .
+pip install -e
 ```
 
 ## Project Structure
@@ -59,7 +59,7 @@ conda create -n mind python=3.9
 conda activate mind
 
 # Install dependencies
-pip install -e .
+pip install -e 
 
 ```
 
@@ -80,7 +80,7 @@ python experiments/visualize_results.py
 ```
 
 ## Data
-The research dataset comprises behavioral tracking and simultaneous neuronal recordings via two-photon calcium imaging, collected during mouse reaching tasks. Specifically, the dataset includes:
+The dataset we used in our research comprises behavioral tracking and simultaneous neuronal recordings via two-photon calcium imaging, collected during mouse reaching tasks. Specifically, the dataset includes:
 
 Behavioral data (footstep events) from Excel files
 MATLAB files containing:
@@ -89,8 +89,6 @@ MATLAB files containing:
 - Deconvolved signals (2999 × 581 neurons)
 - ∆F/F signals (2999 × 581 neurons)
 
-
-=======
 ```bash
 mind/
   ├── config/            # Hydra configurations
