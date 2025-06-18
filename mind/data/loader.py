@@ -173,20 +173,6 @@ def find_most_active_neurons(calcium_signals: Dict[str, np.ndarray],
                              signal_type: str = 'deconv_signal') -> np.ndarray:
     """
     Find the most active neurons based on calcium transient activity.
-
-    Parameters
-    ----------
-    calcium_signals : Dict[str, np.ndarray]
-        Dictionary of calcium signals
-    n_neurons : int
-        Number of top neurons to return
-    signal_type : str
-        Type of signal to use for finding active neurons
-
-    Returns
-    -------
-    np.ndarray
-        Indices of the most active neurons
     """
     signal = calcium_signals[signal_type]
     if signal is None:
