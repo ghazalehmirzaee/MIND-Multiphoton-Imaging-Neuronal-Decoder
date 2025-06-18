@@ -39,18 +39,6 @@ def get_train_val_test_data(datasets: Dict[str, Dict[str, torch.utils.data.Datas
                             signal_type: str) -> Tuple:
     """
     Extract train, validation, and test data for a specific signal type.
-
-    Parameters
-    ----------
-    datasets : Dict[str, Dict[str, torch.utils.data.Dataset]]
-        Dictionary of datasets
-    signal_type : str
-        Signal type to extract ('calcium_signal', 'deltaf_signal', or 'deconv_signal')
-
-    Returns
-    -------
-    Tuple
-        (X_train, y_train, X_val, y_val, X_test, y_test)
     """
     logger.info(f"Extracting data for signal type: {signal_type}")
 
