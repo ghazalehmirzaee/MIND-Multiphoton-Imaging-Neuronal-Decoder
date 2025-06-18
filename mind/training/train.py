@@ -12,18 +12,6 @@ logger = logging.getLogger(__name__)
 def get_model_inputs_from_dataset(dataset: torch.utils.data.Dataset, indices=None) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Extract features and labels from a PyTorch dataset.
-
-    Parameters
-    ----------
-    dataset : torch.utils.data.Dataset
-        PyTorch dataset
-    indices : List[int], optional
-        Indices to extract, by default None (all)
-
-    Returns
-    -------
-    Tuple[torch.Tensor, torch.Tensor]
-        Features and labels
     """
     if indices is None:
         indices = range(len(dataset))
