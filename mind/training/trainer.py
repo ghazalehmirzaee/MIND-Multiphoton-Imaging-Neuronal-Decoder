@@ -1,5 +1,5 @@
 """
-Simplified training pipeline ensuring reproducible results.
+training pipeline ensuring reproducible results.
 """
 import time
 import numpy as np
