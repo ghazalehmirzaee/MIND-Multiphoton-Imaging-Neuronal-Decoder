@@ -144,22 +144,6 @@ def load_and_align_data(mat_file_path: str, xlsx_file_path: str,
                         binary_classification: bool = True) -> Tuple[Dict[str, np.ndarray], np.ndarray]:
     """
     Load and align calcium imaging data with behavioral labels.
-
-    Parameters
-    ----------
-    mat_file_path : str
-        Path to the MATLAB file containing calcium imaging data
-    xlsx_file_path : str
-        Path to the Excel file containing behavioral data
-    binary_classification : bool, optional
-        If True, create binary labels (0 for no footstep, 1 for contralateral/right footstep)
-
-    Returns
-    -------
-    Tuple[Dict[str, np.ndarray], np.ndarray]
-        Tuple containing:
-        - Dictionary of calcium signals
-        - Array of behavior labels
     """
 
     # Load calcium signals
