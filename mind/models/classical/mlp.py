@@ -35,35 +35,6 @@ class MLPModel:
                  optimize_hyperparams: bool = False):
         """
         Initialize an MLP model.
-
-        Parameters
-        ----------
-        hidden_layer_sizes : Tuple[int, ...], optional
-            Hidden layer sizes, by default (64, 128, 32)
-        activation : str, optional
-            Activation function, by default 'relu'
-        solver : str, optional
-            Solver for weight optimization, by default 'adam'
-        alpha : float, optional
-            L2 penalty (regularization term) parameter, by default 0.0001
-        batch_size : str, optional
-            Batch size for gradient-based solvers, by default 'auto'
-        learning_rate : str, optional
-            Learning rate schedule, by default 'adaptive'
-        learning_rate_init : float, optional
-            Initial learning rate, by default 0.001
-        max_iter : int, optional
-            Maximum number of iterations, by default 300
-        early_stopping : bool, optional
-            Whether to use early stopping, by default True
-        validation_fraction : float, optional
-            Fraction of training data for validation, by default 0.1
-        n_iter_no_change : int, optional
-            Maximum number of epochs with no improvement, by default 15
-        random_state : int, optional
-            Random seed for reproducibility, by default 42
-        optimize_hyperparams : bool, optional
-            Whether to optimize hyperparameters, by default False
         """
         # Store hyperparameters
         self.hidden_layer_sizes = hidden_layer_sizes
@@ -105,18 +76,6 @@ class MLPModel:
     def _prepare_data(self, X, y=None):
         """
         Prepare the data for the model.
-
-        Parameters
-        ----------
-        X : torch.Tensor or np.ndarray
-            Input features, shape (n_samples, window_size, n_neurons)
-        y : torch.Tensor or np.ndarray, optional
-            Target labels, shape (n_samples,)
-
-        Returns
-        -------
-        Tuple[np.ndarray, Optional[np.ndarray]]
-            Prepared X and y (if provided)
         """
         # Convert torch tensors to numpy arrays if needed
         if hasattr(X, 'numpy'):
@@ -134,22 +93,6 @@ class MLPModel:
     def optimize_hyperparameters(self, X_train, y_train, cv: int = 3, n_iter: int = 15):
         """
         Optimize model hyperparameters using RandomizedSearchCV.
-
-        Parameters
-        ----------
-        X_train : np.ndarray
-            Training features
-        y_train : np.ndarray
-            Training labels
-        cv : int, optional
-            Number of cross-validation folds, by default 3
-        n_iter : int, optional
-            Number of parameter settings sampled, by default 15
-
-        Returns
-        -------
-        self
-            The model with optimized hyperparameters
         """
         logger.info("Optimizing MLP hyperparameters")
 
