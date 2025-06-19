@@ -164,22 +164,6 @@ class MLPModel:
     def fit(self, X_train, y_train, X_val=None, y_val=None):
         """
         Train the MLP model.
-
-        Parameters
-        ----------
-        X_train : torch.Tensor or np.ndarray
-            Training features
-        y_train : torch.Tensor or np.ndarray
-            Training labels
-        X_val : torch.Tensor or np.ndarray, optional
-            Validation features, by default None
-        y_val : torch.Tensor or np.ndarray, optional
-            Validation labels, by default None
-
-        Returns
-        -------
-        self
-            The trained model
         """
         logger.info("Training MLP model")
 
@@ -217,16 +201,6 @@ class MLPModel:
     def predict(self, X):
         """
         Make predictions with the trained model.
-
-        Parameters
-        ----------
-        X : torch.Tensor or np.ndarray
-            Input features
-
-        Returns
-        -------
-        np.ndarray
-            Predicted labels
         """
         # Prepare and scale data
         X, _ = self._prepare_data(X)
@@ -240,16 +214,6 @@ class MLPModel:
     def predict_proba(self, X):
         """
         Predict class probabilities.
-
-        Parameters
-        ----------
-        X : torch.Tensor or np.ndarray
-            Input features
-
-        Returns
-        -------
-        np.ndarray
-            Predicted class probabilities
         """
         # Prepare and scale data
         X, _ = self._prepare_data(X)
@@ -265,18 +229,6 @@ class MLPModel:
         Estimate feature importance using weight magnitudes.
 
         This is a rough approximation based on the magnitude of weights in the first layer.
-
-        Parameters
-        ----------
-        window_size : int
-            Size of the sliding window
-        n_neurons : int
-            Number of neurons
-
-        Returns
-        -------
-        np.ndarray
-            Feature importance scores, shape (window_size, n_neurons)
         """
         # Make sure the model is trained
         if not hasattr(self.model, 'coefs_'):
