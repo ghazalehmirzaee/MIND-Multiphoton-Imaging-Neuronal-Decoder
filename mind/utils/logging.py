@@ -13,20 +13,6 @@ def setup_logging(log_level: str = 'INFO',
                   console: bool = True) -> logging.Logger:
     """
     Set up logging configuration.
-
-    Parameters
-    ----------
-    log_level : str, optional
-        Logging level ('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'), by default 'INFO'
-    log_file : Optional[Union[str, Path]], optional
-        Path to log file, by default None (no file logging)
-    console : bool, optional
-        Whether to log to console, by default True
-
-    Returns
-    -------
-    logging.Logger
-        Logger object
     """
     # Convert log level string to logging level
     level = getattr(logging, log_level.upper())
