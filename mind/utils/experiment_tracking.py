@@ -50,24 +50,6 @@ def log_artifact(artifact_name: str,
                  metadata: Optional[Dict[str, Any]] = None) -> bool:
     """
     Log an artifact to W&B.
-
-    Parameters
-    ----------
-    artifact_name : str
-        Name of the artifact
-    artifact_type : str
-        Type of the artifact (e.g., 'model', 'dataset', 'results')
-    file_path : Union[str, Path]
-        Path to the file to log
-    description : Optional[str], optional
-        Description of the artifact, by default None
-    metadata : Optional[Dict[str, Any]], optional
-        Metadata for the artifact, by default None
-
-    Returns
-    -------
-    bool
-        True if logging was successful, False otherwise
     """
     try:
         # Create artifact
@@ -97,20 +79,6 @@ def log_results(results: Dict[str, Any],
                 step: Optional[int] = None) -> bool:
     """
     Log results to W&B.
-
-    Parameters
-    ----------
-    results : Dict[str, Any]
-        Results to log
-    prefix : Optional[str], optional
-        Prefix for the metrics, by default None
-    step : Optional[int], optional
-        Step for the metrics, by default None
-
-    Returns
-    -------
-    bool
-        True if logging was successful, False otherwise
     """
     try:
         # Apply prefix if provided
@@ -131,20 +99,6 @@ def log_results(results: Dict[str, Any],
 def log_model(model, model_name: str, metadata: Optional[Dict[str, Any]] = None) -> bool:
     """
     Log a model to W&B.
-
-    Parameters
-    ----------
-    model : model object
-        Model to log
-    model_name : str
-        Name of the model
-    metadata : Optional[Dict[str, Any]], optional
-        Metadata for the model, by default None
-
-    Returns
-    -------
-    bool
-        True if logging was successful, False otherwise
     """
     try:
         # Log model
@@ -165,11 +119,6 @@ def log_model(model, model_name: str, metadata: Optional[Dict[str, Any]] = None)
 def finish_wandb() -> bool:
     """
     Finish the current W&B run.
-
-    Returns
-    -------
-    bool
-        True if finishing was successful, False otherwise
     """
     try:
         wandb.finish()
