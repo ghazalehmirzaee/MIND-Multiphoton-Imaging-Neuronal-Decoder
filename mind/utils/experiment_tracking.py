@@ -18,24 +18,6 @@ def init_wandb(project_name: str = "mind-calcium-imaging",
                log_dir: Optional[Union[str, Path]] = None) -> bool:
     """
     Initialize Weights & Biases for experiment tracking.
-
-    Parameters
-    ----------
-    project_name : str, optional
-        W&B project name, by default "mind-calcium-imaging"
-    entity : Optional[str], optional
-        W&B entity (username or team name), by default None
-    api_key : Optional[str], optional
-        W&B API key, by default None
-    config : Optional[Dict[str, Any]], optional
-        Configuration for the experiment, by default None
-    log_dir : Optional[Union[str, Path]], optional
-        Directory for W&B logs, by default None
-
-    Returns
-    -------
-    bool
-        True if initialization was successful, False otherwise
     """
     try:
         # Check if API key is provided or in environment
