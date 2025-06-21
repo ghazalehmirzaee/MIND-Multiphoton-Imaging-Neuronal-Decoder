@@ -180,18 +180,6 @@ class CNNWrapper:
     def _prepare_data(self, X, y=None):
         """
         Prepare data for training or inference.
-
-        Parameters
-        ----------
-        X : torch.Tensor or np.ndarray
-            Input features
-        y : torch.Tensor or np.ndarray, optional
-            Target labels, by default None
-
-        Returns
-        -------
-        Tuple[torch.Tensor, Optional[torch.Tensor]]
-            Prepared data
         """
         # Convert numpy arrays to tensors if needed
         if isinstance(X, np.ndarray):
