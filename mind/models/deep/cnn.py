@@ -25,21 +25,6 @@ class CNNModel(nn.Module):
                  dropout_rate: float = 0.5):
         """
         Initialize optimized CNN model.
-
-        Parameters
-        ----------
-        window_size : int
-            Size of the sliding window
-        n_neurons : int
-            Number of neurons
-        n_filters : List[int], optional
-            Number of filters in each convolutional layer, by default [64, 128, 256]
-        kernel_size : int, optional
-            Size of convolutional kernels, by default 3
-        output_dim : int, optional
-            Number of output classes, by default 2
-        dropout_rate : float, optional
-            Dropout rate for regularization, by default 0.5
         """
         super(CNNModel, self).__init__()
 
