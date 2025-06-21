@@ -485,16 +485,6 @@ class CNNWrapper:
     def get_top_contributing_neurons(self, n_top=100) -> np.ndarray:
         """
         Get indices of top contributing neurons.
-
-        Parameters
-        ----------
-        n_top : int, optional
-            Number of top neurons to return, by default 100
-
-        Returns
-        -------
-        np.ndarray
-            Indices of top contributing neurons
         """
         # Ensure model is initialized
         if self.model is None:
