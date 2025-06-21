@@ -148,35 +148,6 @@ class CNNWrapper:
                  random_state: int = 42):
         """
         Initialize CNN wrapper.
-
-        Parameters
-        ----------
-        window_size : Optional[int], optional
-            Size of the sliding window, by default None (inferred during fit)
-        n_neurons : Optional[int], optional
-            Number of neurons, by default None (inferred during fit)
-        n_filters : List[int], optional
-            Number of filters in convolutional layers, by default [64, 128, 256]
-        kernel_size : int, optional
-            Size of convolutional kernels, by default 3
-        output_dim : int, optional
-            Number of output classes, by default 2
-        dropout_rate : float, optional
-            Dropout rate for regularization, by default 0.5
-        learning_rate : float, optional
-            Learning rate for optimizer, by default 0.0005
-        weight_decay : float, optional
-            Weight decay for regularization, by default 1e-4
-        batch_size : int, optional
-            Batch size for training, by default 32
-        num_epochs : int, optional
-            Maximum number of training epochs, by default 100
-        patience : int, optional
-            Patience for early stopping, by default 10
-        device : str, optional
-            Device for training ('cuda' or 'cpu'), by default 'cuda' if available
-        random_state : int, optional
-            Random seed for reproducibility, by default 42
         """
         # Set random seed for reproducibility
         torch.manual_seed(random_state)
