@@ -1,8 +1,5 @@
 """
-Optimized CNN model for calcium imaging data with stable performance.
-
-This implementation provides a well-balanced architecture that achieves high accuracy
-while maintaining interpretable feature importance.
+Optimized CNN model for calcium imaging data.
 """
 import torch
 import torch.nn as nn
@@ -17,9 +14,6 @@ logger = logging.getLogger(__name__)
 class CNNModel(nn.Module):
     """
     Optimized CNN for calcium imaging neural decoding.
-
-    This model uses a streamlined architecture focused on detecting temporal patterns
-    in neural activity, with proper regularization and weight initialization.
     """
 
     def __init__(self,
