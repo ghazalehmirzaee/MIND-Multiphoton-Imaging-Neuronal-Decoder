@@ -100,18 +100,6 @@ class CNNModel(nn.Module):
 
         This method analyzes the trained weights to determine which neurons and
         time points are most important for classification.
-
-        Parameters
-        ----------
-        window_size : int, optional
-            Window size (defaults to self.window_size)
-        n_neurons : int, optional
-            Number of neurons (defaults to self.n_neurons)
-
-        Returns
-        -------
-        np.ndarray
-            Feature importance matrix of shape (window_size, n_neurons)
         """
         # Use instance values if not provided
         if window_size is None:
