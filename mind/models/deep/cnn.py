@@ -71,16 +71,6 @@ class CNNModel(nn.Module):
     def forward(self, x):
         """
         Forward pass with residual connections.
-
-        Parameters
-        ----------
-        x : torch.Tensor
-            Input tensor of shape (batch_size, window_size, n_neurons)
-
-        Returns
-        -------
-        torch.Tensor
-            Output tensor of shape (batch_size, output_dim)
         """
         # Reshape for 1D convolution: (batch, n_neurons, window_size)
         x = x.permute(0, 2, 1)
