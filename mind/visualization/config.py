@@ -10,11 +10,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Define consistent scientific color scheme
+# Define consistent color scheme
 SIGNAL_COLORS = {
-    'calcium_signal': '#356d9e',  # Scientific blue
-    'deltaf_signal': '#4c8b64',  # Scientific green
-    'deconv_signal': '#a85858'  # Scientific red
+    'calcium_signal': '#356d9e',  #  blue
+    'deltaf_signal': '#4c8b64',  #  green
+    'deconv_signal': '#a85858'  #  red
 }
 
 # Display names for signals
@@ -65,7 +65,6 @@ def set_publication_style():
     plt.rcParams['legend.fontsize'] = 10
     plt.rcParams['figure.titlesize'] = 16
 
-    # Additional settings for publication quality
     plt.rcParams['figure.dpi'] = 150
     plt.rcParams['savefig.dpi'] = 300
     plt.rcParams['savefig.bbox'] = 'tight'
