@@ -97,25 +97,6 @@ def extract_importance_values_from_results(results: Dict[str, Dict[str, Any]],
                                          n_neurons: int) -> Optional[np.ndarray]:
     """
     Extract importance values from model results.
-
-    This function tries to extract neuron importance values directly from the results
-    dictionary rather than estimating or simulating them.
-
-    Parameters
-    ----------
-    results : Dict[str, Dict[str, Any]]
-        Results dictionary
-    model_name : str
-        Name of the model
-    signal_type : str
-        Type of signal
-    n_neurons : int
-        Total number of neurons
-
-    Returns
-    -------
-    Optional[np.ndarray]
-        Array of importance values for each neuron, or None if not available
     """
     # Check if model exists in results
     if model_name not in results:
@@ -160,22 +141,6 @@ def get_model_importance(results: Dict[str, Dict[str, Any]],
                         top_n: int = 20) -> Dict[str, Tuple[np.ndarray, np.ndarray]]:
     """
     Get importance values and top neurons for a specific model.
-
-    Parameters
-    ----------
-    results : Dict[str, Dict[str, Any]]
-        Results dictionary
-    calcium_signals : Dict[str, np.ndarray]
-        Dictionary of calcium signals
-    model_name : str
-        Name of the model
-    top_n : int, optional
-        Number of top neurons to return, by default 20
-
-    Returns
-    -------
-    Dict[str, Tuple[np.ndarray, np.ndarray]]
-        Dictionary mapping signal type to (importance, top_indices)
     """
     importance_dict = {}
 
