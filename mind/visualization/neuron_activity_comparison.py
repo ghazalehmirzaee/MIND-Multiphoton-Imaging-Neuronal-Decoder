@@ -299,26 +299,6 @@ def create_side_by_side_comparison(positions, model_important_indices, active_in
                                    signal_type, roi_matrix=None, top_n=20):
     """
     Create side-by-side scatter plots comparing model-important and most active neurons.
-
-    Parameters
-    ----------
-    positions : np.ndarray
-        Array of (x, y) positions for each neuron
-    model_important_indices : np.ndarray or list
-        Indices of neurons deemed important by the model
-    active_indices : np.ndarray or list
-        Indices of most active neurons
-    signal_type : str
-        Type of signal ('calcium_signal', 'deltaf_signal', or 'deconv_signal')
-    roi_matrix : np.ndarray, optional
-        ROI matrix to plot in the background, by default None
-    top_n : int, optional
-        Number of top neurons to consider, by default 20
-
-    Returns
-    -------
-    matplotlib.figure.Figure
-        The created figure
     """
     # Get signal color
     signal_color = SIGNAL_COLORS[signal_type]
