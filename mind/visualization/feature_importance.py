@@ -27,7 +27,6 @@ def plot_temporal_importance_patterns(
 
     signals = ['calcium_signal', 'deltaf_signal', 'deconv_signal']
 
-    # Define the frame range we want to visualize (4-14, which is indices 4:15)
     start_frame = 4
     end_frame = 15  # 10 frames total
     frame_indices = slice(start_frame, end_frame)
@@ -222,8 +221,6 @@ def plot_top_neuron_importance(
             # Create horizontal bars with enhanced visibility (darker background)
             y_positions = np.arange(len(top_importance))
 
-            # Use a more visible background color (darker than before)
-            # Choose a color that's 60% of the way through the gradient for better visibility
             background_color_idx = min(int(0.6 * (len(gradient) - 1)), len(gradient) - 1)
             background_color = gradient[background_color_idx]
 
