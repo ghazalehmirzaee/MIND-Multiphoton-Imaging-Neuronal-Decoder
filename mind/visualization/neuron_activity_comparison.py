@@ -203,20 +203,6 @@ def calculate_overlap_metrics(model_important_neurons: Dict[str, Dict[str, Tuple
                               top_n: int = 20) -> Dict[str, Dict[str, Dict[str, Any]]]:
     """
     Calculate the overlap between model-important neurons and most active neurons.
-
-    Parameters
-    ----------
-    model_important_neurons : Dict[str, Dict[str, Tuple[np.ndarray, np.ndarray]]]
-        Dictionary mapping model name to a dictionary mapping signal type to (importance, top_indices)
-    top_active_neurons : Dict[str, np.ndarray]
-        Dictionary mapping signal type to array of top active neuron indices
-    top_n : int, optional
-        Number of top neurons to consider, by default 20
-
-    Returns
-    -------
-    Dict[str, Dict[str, Dict[str, Any]]]
-        Dictionary mapping model name to a dictionary mapping signal type to overlap metrics
     """
     overlap_metrics = {}
 
@@ -274,27 +260,6 @@ def plot_neuron_scatter(ax, positions, highlighted_indices, color, roi_matrix=No
                         marker='x', marker_size=50, alpha=0.8, highlight_label=None):
     """
     Create a scatter plot of neurons with highlighted indices.
-
-    Parameters
-    ----------
-    ax : matplotlib.axes.Axes
-        The axes to plot on
-    positions : np.ndarray
-        Array of (x, y) positions for each neuron
-    highlighted_indices : np.ndarray or list
-        Indices of neurons to highlight
-    color : str
-        Color for the highlighted neurons
-    roi_matrix : np.ndarray, optional
-        ROI matrix to plot in the background, by default None
-    marker : str, optional
-        Marker style for highlighted neurons, by default 'x'
-    marker_size : int, optional
-        Size of markers, by default 50
-    alpha : float, optional
-        Transparency level, by default 0.8
-    highlight_label : str, optional
-        Label for highlighted points in legend, by default None
     """
     # Plot ROI matrix if provided
     if roi_matrix is not None:
