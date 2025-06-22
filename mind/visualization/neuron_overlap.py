@@ -1,9 +1,5 @@
 """
 Final enhanced Venn diagram visualization with exact specifications and guaranteed dual-model processing.
-
-This module creates publication-quality Venn diagrams using exact user-specified colors,
-perfect even distribution, visual effects, and guaranteed processing of both Random Forest
-and CNN models with complete neuron accountability.
 """
 import numpy as np
 import matplotlib.pyplot as plt
@@ -16,7 +12,7 @@ import logging
 from typing import Dict, List, Optional, Tuple, Any, Set
 import math
 
-# Import your existing visualization components
+# Import existing visualization components
 from mind.visualization.config import (
     SIGNAL_COLORS,
     SIGNAL_DISPLAY_NAMES,
@@ -32,11 +28,10 @@ from mind.visualization.neuron_importance import (
 
 logger = logging.getLogger(__name__)
 
-# Exact user-specified color scheme with calculated lighter variants for backgrounds
 USER_EXACT_COLORS = {
-    'calcium_signal': '#356d9e',  # Scientific blue
-    'deltaf_signal': '#4c8b64',  # Scientific green
-    'deconv_signal': '#a85858'  # Scientific red
+    'calcium_signal': '#356d9e',  #  blue
+    'deltaf_signal': '#4c8b64',  #  green
+    'deconv_signal': '#a85858'  #  red
 }
 
 
@@ -79,15 +74,6 @@ def create_enhanced_neuron_with_effects(ax, x, y, importance=1.0, color='#4CAF50
                                         min_size=0.018, max_size=0.070):
     """
     Create a neuron bubble with sophisticated visual effects including shadows and reflections.
-
-    This function creates publication-quality neuron representations that use depth perception
-    principles to enhance visual clarity and importance hierarchy. Think of this like creating
-    a high-quality scientific illustration where each element has subtle depth and dimension
-    that helps readers distinguish between different importance levels at a glance.
-
-    The visual effects serve functional purposes beyond aesthetics - they help separate
-    overlapping elements and make it easier to count individual neurons accurately, which
-    is critical for scientific validation of the visualization.
     """
     # Calculate size based on importance with enhanced scaling
     if importance > 0:
@@ -139,22 +125,11 @@ def create_enhanced_neuron_with_effects(ax, x, y, importance=1.0, color='#4CAF50
 
 def create_perfect_venn_layout(ax):
     """
-    Create the perfect Venn diagram layout using user-specified colors with optimal proportions.
-
-    This layout system uses your exact color specifications while creating optimal spatial
-    relationships for even neuron distribution. Think of this like an architect designing
-    a building where every room (circle) needs to be the right size for its intended use
-    (number of neurons) while the shared spaces (intersections) facilitate easy movement
-    between areas.
-
-    The circle positioning and sizing are mathematically optimized to provide maximum
-    usable area while maintaining clear visual boundaries between regions.
+    Create the Venn diagram layout.
     """
-    # Optimized positioning for maximum usable space and perfect proportions
     centers = [(-0.6, -0.05), (0.6, -0.05), (0, 0.7)]
     radii = [0.85, 0.85, 0.85]
 
-    # Set optimal figure dimensions that prevent any compression
     ax.set_xlim(-2.0, 2.0)
     ax.set_ylim(-1.2, 1.6)
 
@@ -182,11 +157,6 @@ def create_perfect_venn_layout(ax):
 def determine_precise_region(point, centers, radii, tolerance=0.002):
     """
     Determine region membership with maximum precision for scientific accuracy.
-
-    This function acts like a high-precision measuring instrument that can determine
-    exactly which region a point belongs to, ensuring that every neuron is placed
-    in mathematically correct locations. The tight tolerance ensures consistent
-    classification even for points near region boundaries.
     """
     distances = []
     for i in range(3):
@@ -205,15 +175,6 @@ def generate_perfectly_distributed_position(region, centers, radii, existing_pos
                                             max_attempts=1500, min_distance=0.075):
     """
     Generate positions with perfect even distribution throughout each region.
-
-    This advanced algorithm creates mathematically even distributions that make full use
-    of available space while maintaining scientific accuracy. Think of this like a master
-    chess player who doesn't just place pieces randomly, but creates patterns that use
-    the entire board effectively while following all the rules of the game.
-
-    The algorithm uses the neuron's index within its region to calculate optimal positioning
-    that ensures even spacing and beautiful visual patterns. This creates distributions
-    that are both scientifically accurate and aesthetically pleasing.
     """
     if existing_positions is None:
         existing_positions = []
@@ -270,7 +231,7 @@ def generate_perfectly_distributed_position(region, centers, radii, existing_pos
 
     # Apply pattern-specific distribution algorithms for perfect spacing
     for phase in range(3):  # Three phases with different strategies
-        current_min_distance = min_distance * (0.8 ** phase)  # Gradually relax spacing
+        current_min_distance = min_distance * (0.8 ** phase) 
         attempts_this_phase = max_attempts // 3
 
         for attempt in range(attempts_this_phase):
@@ -358,14 +319,6 @@ def create_final_enhanced_venn_diagram(
 ) -> plt.Figure:
     """
     Create the final enhanced Venn diagram with all user specifications implemented perfectly.
-
-    This function creates publication-quality Venn diagrams that meet every single requirement
-    specified by the user. Think of this like a master craftsperson creating a piece for a
-    prestigious exhibition - every detail must be perfect, every specification must be met
-    exactly, and the final result must be both scientifically accurate and visually stunning.
-
-    The function guarantees exact neuron counts, perfect distribution, enhanced visual effects,
-    and uses the exact color specifications provided by the user.
     """
     # Apply publication-quality styling
     set_publication_style()
@@ -565,16 +518,6 @@ def create_final_enhanced_venn_diagram(
     model_display_name = MODEL_DISPLAY_NAMES.get(model_name, model_name.replace('_', ' ').title())
     common_all = len(neuron_sets[0] & neuron_sets[1] & neuron_sets[2])
 
-    # title = f"Movement-Encoding Neurons in {model_display_name} Model\n"
-    # title += f"Complete Analysis: {total_perfectly_distributed} Neurons with Enhanced Visual Effects"
-
-    # ax.set_title(title, fontsize=14, fontweight='bold', pad=20, linespacing=1.2)
-
-    # Clean interpretation without footnotes
-    # interpretation_text = f"Enhanced visualization with reflections and shadows. {common_all} neurons robust across all signal types."
-    # ax.text(0, -1.05, interpretation_text, ha='center', fontsize=10,
-    #         style='italic', fontweight='bold')
-
     ax.axis('off')
     plt.tight_layout()
 
@@ -597,16 +540,7 @@ def create_guaranteed_dual_model_diagrams(
         output_dir: Optional[str] = None,
         show_plot: bool = True
 ) -> Dict[str, plt.Figure]:
-    """
-    GUARANTEED creation of both Random Forest and CNN model diagrams with all enhancements.
 
-    This function absolutely guarantees that both models will be processed and visualized
-    with all the requested enhancements. Think of this like a production line with quality
-    assurance checkpoints that ensure both products meet all specifications before shipping.
-
-    The function includes comprehensive error handling, detailed logging, and will clearly
-    report if there are any issues preventing dual-model generation.
-    """
     # Explicit targeting of both required models
     required_models = ['random_forest', 'cnn']
     successfully_generated = {}
@@ -741,8 +675,6 @@ def create_guaranteed_dual_model_diagrams(
     return successfully_generated
 
 
-# Modified the plot_neuron_venn_diagram function in mind/visualization/neuron_overlap.py
-
 def plot_neuron_venn_diagram(
         calcium_signals: Dict[str, np.ndarray],
         excluded_cells: np.ndarray,
@@ -753,9 +685,6 @@ def plot_neuron_venn_diagram(
 ) -> plt.Figure:
     """
     Create a Venn diagram with tightly fitted circles around neuron bubbles.
-
-    This version calculates the optimal circle sizes based on the actual
-    distribution of neurons in each region, minimizing empty space.
     """
     set_publication_style()
 
@@ -995,13 +924,6 @@ def create_neuron_venn_diagrams(
 ) -> Dict[str, plt.Figure]:
     """
     Create final enhanced Venn diagrams for BOTH Random Forest and CNN models.
-
-    This function GUARANTEES generation of both models with all requested enhancements:
-    - Exact user-specified colors with lighter circle backgrounds
-    - Perfect even distribution of neurons
-    - Enhanced visual effects (shadows and reflections)
-    - Exact neuron counts
-    - Clean presentation without footnotes
     """
     return create_guaranteed_dual_model_diagrams(
         mat_file_path, model_or_results, top_n, output_dir, show_plot
