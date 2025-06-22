@@ -39,16 +39,6 @@ def calculate_neuron_activity(calcium_signals: Dict[str, np.ndarray]) -> Dict[st
 
     For raw and ΔF/F signals, calculates the sum of activity.
     For deconvolved signal, counts the total estimated spikes.
-
-    Parameters
-    ----------
-    calcium_signals : Dict[str, np.ndarray]
-        Dictionary containing all three signal types
-
-    Returns
-    -------
-    Dict[str, np.ndarray]
-        Dictionary mapping signal type to array of total activity per neuron
     """
     activity_sums = {}
 
@@ -62,13 +52,12 @@ def calculate_neuron_activity(calcium_signals: Dict[str, np.ndarray]) -> Dict[st
         if signal_type == 'deconv_signal':
             # For deconvolved signal, count spike events (activity > threshold)
             # This is effectively counting the total number of inferred spikes
-            spike_threshold = 0.01  # Adjust based on your data
+            spike_threshold = 0.01  
             activity_sums[signal_type] = np.sum(signal > spike_threshold, axis=0)
             logger.info(f"Calculated spike counts for {n_neurons} neurons in deconvolved signal")
 
         elif signal_type == 'deltaf_signal':
             # For ΔF/F, sum positive changes (calcium influx events)
-            # This focuses on calcium increases rather than decreases
             positive_signal = np.maximum(signal, 0)
             activity_sums[signal_type] = np.sum(positive_signal, axis=0)
             logger.info(f"Calculated ΔF/F activity sums for {n_neurons} neurons")
@@ -88,18 +77,6 @@ def calculate_neuron_activity(calcium_signals: Dict[str, np.ndarray]) -> Dict[st
 def get_top_active_neurons(activity_sums: Dict[str, np.ndarray], top_n: int = 20) -> Dict[str, np.ndarray]:
     """
     Identify the top N most active neurons for each signal type.
-
-    Parameters
-    ----------
-    activity_sums : Dict[str, np.ndarray]
-        Dictionary mapping signal type to array of total activity per neuron
-    top_n : int, optional
-        Number of top neurons to return, by default 20
-
-    Returns
-    -------
-    Dict[str, np.ndarray]
-        Dictionary mapping signal type to array of top neuron indices
     """
     top_active_neurons = {}
 
