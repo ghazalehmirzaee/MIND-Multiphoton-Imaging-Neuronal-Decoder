@@ -151,16 +151,6 @@ class RandomForestModel:
     def predict_proba(self, X):
         """
         Predict class probabilities.
-
-        Parameters
-        ----------
-        X : torch.Tensor or np.ndarray
-            Input features
-
-        Returns
-        -------
-        np.ndarray
-            Predicted class probabilities
         """
         # Prepare data
         X, _ = self._prepare_data(X)
