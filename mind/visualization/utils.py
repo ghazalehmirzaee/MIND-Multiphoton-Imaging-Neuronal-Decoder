@@ -58,19 +58,6 @@ def create_output_directory(base_dir: str, subdirs: Optional[List[str]] = None) 
 def save_figure(fig, output_path: str, dpi: int = 300, bbox_inches: str = 'tight', pad_inches: float = 0.1):
     """
     Save a figure with proper configuration.
-
-    Parameters
-    ----------
-    fig : matplotlib.figure.Figure
-        Figure to save
-    output_path : str
-        Path to save figure
-    dpi : int, optional
-        Resolution in dots per inch, by default 300
-    bbox_inches : str, optional
-        Bounding box in inches, by default 'tight'
-    pad_inches : float, optional
-        Padding in inches, by default 0.1
     """
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -88,13 +75,6 @@ def save_figure(fig, output_path: str, dpi: int = 300, bbox_inches: str = 'tight
 def create_visualization_summary(output_dir: Path, subdirs: Dict[str, Path]):
     """
     Create a summary report of all generated visualizations.
-
-    Parameters
-    ----------
-    output_dir : Path
-        Base output directory
-    subdirs : Dict[str, Path]
-        Dictionary mapping subdirectory names to Path objects
     """
     summary_path = output_dir / 'visualization_summary.txt'
 
