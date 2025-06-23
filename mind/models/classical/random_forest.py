@@ -172,18 +172,6 @@ class RandomForestModel:
 
         This method extracts feature importance from the trained model and reshapes
         it to a matrix of shape (window_size, n_neurons).
-
-        Parameters
-        ----------
-        window_size : int
-            Size of the sliding window
-        n_neurons : int
-            Number of neurons
-
-        Returns
-        -------
-        np.ndarray
-            Feature importance matrix of shape (window_size, n_neurons)
         """
         if not hasattr(self.model, 'feature_importances_'):
             raise ValueError("Model must be trained before getting feature importance")
