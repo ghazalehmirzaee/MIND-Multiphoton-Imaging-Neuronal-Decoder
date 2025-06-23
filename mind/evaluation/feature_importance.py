@@ -11,20 +11,6 @@ logger = logging.getLogger(__name__)
 def extract_feature_importance(model, window_size: int, n_neurons: int) -> np.ndarray:
     """
     Extract feature importance from a trained model.
-
-    Parameters
-    ----------
-    model : model object
-        Trained model with a get_feature_importance method
-    window_size : int
-        Size of the sliding window
-    n_neurons : int
-        Number of neurons
-
-    Returns
-    -------
-    np.ndarray
-        Feature importance matrix, shape (window_size, n_neurons)
     """
     logger.info("Extracting feature importance from model")
 
@@ -81,16 +67,6 @@ def extract_feature_importance(model, window_size: int, n_neurons: int) -> np.nd
 def analyze_temporal_importance(importance_matrix: np.ndarray) -> np.ndarray:
     """
     Analyze temporal importance by averaging across neurons.
-
-    Parameters
-    ----------
-    importance_matrix : np.ndarray
-        Feature importance matrix, shape (window_size, n_neurons)
-
-    Returns
-    -------
-    np.ndarray
-        Temporal importance, shape (window_size,)
     """
     # Calculate mean importance across neurons for each time step
     temporal_importance = importance_matrix.mean(axis=1)
@@ -105,18 +81,6 @@ def analyze_temporal_importance(importance_matrix: np.ndarray) -> np.ndarray:
 def analyze_neuron_importance(importance_matrix: np.ndarray, top_n: int = 20) -> Tuple[np.ndarray, np.ndarray]:
     """
     Analyze neuron-specific importance by averaging across time steps.
-
-    Parameters
-    ----------
-    importance_matrix : np.ndarray
-        Feature importance matrix, shape (window_size, n_neurons)
-    top_n : int, optional
-        Number of top neurons to return, by default 20
-
-    Returns
-    -------
-    Tuple[np.ndarray, np.ndarray]
-        (Neuron importance, Indices of top neurons)
     """
     # Calculate mean importance across time steps for each neuron
     neuron_importance = importance_matrix.mean(axis=0)
@@ -134,18 +98,6 @@ def analyze_neuron_importance(importance_matrix: np.ndarray, top_n: int = 20) ->
 def find_important_time_windows(importance_matrix: np.ndarray, percentile: float = 90) -> List[Tuple[int, int]]:
     """
     Find time windows with high feature importance.
-
-    Parameters
-    ----------
-    importance_matrix : np.ndarray
-        Feature importance matrix, shape (window_size, n_neurons)
-    percentile : float, optional
-        Percentile threshold for importance, by default 90
-
-    Returns
-    -------
-    List[Tuple[int, int]]
-        List of (start, end) time windows
     """
     # Calculate temporal importance
     temporal_importance = analyze_temporal_importance(importance_matrix)
@@ -177,20 +129,6 @@ def find_important_time_windows(importance_matrix: np.ndarray, percentile: float
 def create_importance_summary(importance_matrix: np.ndarray, window_size: int, n_neurons: int) -> Dict[str, Any]:
     """
     Create a comprehensive summary of feature importance.
-
-    Parameters
-    ----------
-    importance_matrix : np.ndarray
-        Feature importance matrix, shape (window_size, n_neurons)
-    window_size : int
-        Size of the sliding window
-    n_neurons : int
-        Number of neurons
-
-    Returns
-    -------
-    Dict[str, Any]
-        Dictionary containing importance analysis results
     """
     # Analyze temporal importance
     temporal_importance = analyze_temporal_importance(importance_matrix)
