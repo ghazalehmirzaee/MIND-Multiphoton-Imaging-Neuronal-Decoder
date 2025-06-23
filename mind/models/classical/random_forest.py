@@ -1,8 +1,5 @@
 """
 Optimized Random Forest model implementation for calcium imaging data.
-
-This implementation focuses on simplicity and effectiveness for decoding behavior
-from calcium imaging data, with proper preprocessing and feature importance extraction.
 """
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
@@ -17,9 +14,6 @@ logger = logging.getLogger(__name__)
 class RandomForestModel:
     """
     Optimized Random Forest model for neural decoding.
-
-    This class provides a wrapper around sklearn's RandomForestClassifier with
-    appropriate preprocessing and methods for feature importance extraction.
     """
 
     def __init__(self,
@@ -38,35 +32,6 @@ class RandomForestModel:
                  optimize_hyperparams: bool = False):
         """
         Initialize Random Forest model with preprocessing options.
-
-        Parameters
-        ----------
-        n_estimators : int, optional
-            Number of trees in the forest, by default 300
-        max_depth : Optional[int], optional
-            Maximum depth of trees, by default None (unlimited)
-        min_samples_split : int, optional
-            Minimum samples required to split a node, by default 5
-        min_samples_leaf : int, optional
-            Minimum samples required in a leaf node, by default 2
-        max_features : str, optional
-            Number of features to consider for best split, by default 'sqrt'
-        class_weight : str, optional
-            Class weights for imbalanced data, by default 'balanced_subsample'
-        n_jobs : int, optional
-            Number of jobs to run in parallel, by default -1 (all CPUs)
-        random_state : int, optional
-            Random seed for reproducibility, by default 42
-        criterion : str, optional
-            Function to measure quality of a split, by default 'gini'
-        bootstrap : bool, optional
-            Whether to use bootstrap samples, by default True
-        use_pca : bool, optional
-            Whether to use PCA for dimensionality reduction, by default False
-        pca_variance : float, optional
-            Explained variance ratio threshold for PCA, by default 0.95
-        optimize_hyperparams : bool, optional
-            Whether to optimize hyperparameters, by default False
         """
         # Store parameters
         self.n_estimators = n_estimators
@@ -107,20 +72,6 @@ class RandomForestModel:
     def _prepare_data(self, X, y=None):
         """
         Prepare data for model training or inference.
-
-        This method handles conversion from different formats and reshaping.
-
-        Parameters
-        ----------
-        X : torch.Tensor or np.ndarray
-            Input features
-        y : torch.Tensor or np.ndarray, optional
-            Target labels, by default None
-
-        Returns
-        -------
-        Tuple[np.ndarray, np.ndarray or None]
-            Prepared data
         """
         # Convert torch tensors to numpy if needed
         if hasattr(X, 'numpy'):
