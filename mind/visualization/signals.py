@@ -75,9 +75,7 @@ def plot_signal_comparison_top(
             ax.spines['left'].set_color(color)
             ax.spines['left'].set_linewidth(2)
 
-    # fig.suptitle('Signal Comparison for Top 5 Active Neurons',
-    #              fontsize=16, fontweight='bold')
-
+  
     if output_dir:
         output_path = Path(output_dir) / 'signal_comparison_top.png'
         fig.savefig(output_path, dpi=300, bbox_inches='tight')
