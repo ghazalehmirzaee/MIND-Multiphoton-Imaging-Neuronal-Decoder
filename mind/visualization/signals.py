@@ -1,7 +1,6 @@
 # mind/visualization/signals.py
 """
 Signal visualization module for calcium imaging data.
-Uses consistent color scheme for all signal types.
 """
 import numpy as np
 import matplotlib.pyplot as plt
@@ -26,22 +25,6 @@ def plot_signal_comparison_top(
 
     Creates a vertically stacked plot showing raw, ΔF/F, and deconvolved signals
     for the top 5 most active neurons.
-
-    Parameters
-    ----------
-    calcium_signals : Dict[str, np.ndarray]
-        Dictionary containing all three signal types
-    top_indices : np.ndarray
-        Indices of top 5 most active neurons
-    time_range : Optional[Tuple[int, int]]
-        Time range to plot (start, end)
-    output_dir : Optional[Path]
-        Directory to save the figure
-
-    Returns
-    -------
-    plt.Figure
-        The created figure
     """
     set_publication_style()
 
