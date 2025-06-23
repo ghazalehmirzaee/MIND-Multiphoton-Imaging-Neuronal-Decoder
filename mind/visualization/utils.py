@@ -17,11 +17,6 @@ logger = logging.getLogger(__name__)
 def check_dependencies() -> Dict[str, bool]:
     """
     Check if required visualization dependencies are installed.
-
-    Returns
-    -------
-    Dict[str, bool]
-        Dictionary mapping package names to availability status
     """
     dependencies = {
         'matplotlib': True,  # Always available as it's a core dependency
@@ -45,18 +40,6 @@ def check_dependencies() -> Dict[str, bool]:
 def create_output_directory(base_dir: str, subdirs: Optional[List[str]] = None) -> Dict[str, Path]:
     """
     Create output directory structure.
-
-    Parameters
-    ----------
-    base_dir : str
-        Base output directory
-    subdirs : Optional[List[str]], optional
-        List of subdirectories to create, by default None
-
-    Returns
-    -------
-    Dict[str, Path]
-        Dictionary mapping subdirectory names to Path objects
     """
     base_path = Path(base_dir)
     base_path.mkdir(parents=True, exist_ok=True)
