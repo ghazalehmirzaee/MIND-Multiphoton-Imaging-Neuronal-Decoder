@@ -86,18 +86,6 @@ class FCNNModel(nn.Module):
     def get_feature_importance(self, window_size: int, n_neurons: int) -> np.ndarray:
         """
         Estimate feature importance using first layer weights.
-
-        Parameters
-        ----------
-        window_size : int
-            Size of the sliding window
-        n_neurons : int
-            Number of neurons
-
-        Returns
-        -------
-        np.ndarray
-            Feature importance scores, shape (window_size, n_neurons)
         """
         # Get the weights of the first layer
         first_layer = None
