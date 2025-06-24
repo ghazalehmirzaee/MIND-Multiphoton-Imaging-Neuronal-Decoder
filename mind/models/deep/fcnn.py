@@ -164,18 +164,6 @@ class FCNNWrapper:
     def _prepare_data(self, X, y=None):
         """
         Prepare the data for the model.
-
-        Parameters
-        ----------
-        X : torch.Tensor or np.ndarray
-            Input features
-        y : torch.Tensor or np.ndarray, optional
-            Target labels
-
-        Returns
-        -------
-        Tuple[torch.Tensor, Optional[torch.Tensor]]
-            Prepared X and y (if provided)
         """
         # Convert numpy arrays to torch tensors if needed
         if isinstance(X, np.ndarray):
