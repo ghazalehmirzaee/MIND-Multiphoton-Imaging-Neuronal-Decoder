@@ -425,18 +425,6 @@ class CNNWrapper:
     def get_feature_importance(self, window_size=None, n_neurons=None) -> np.ndarray:
         """
         Get feature importance from the model.
-
-        Parameters
-        ----------
-        window_size : int, optional
-            Size of the sliding window, by default None (use self.window_size)
-        n_neurons : int, optional
-            Number of neurons, by default None (use self.n_neurons)
-
-        Returns
-        -------
-        np.ndarray
-            Feature importance matrix of shape (window_size, n_neurons)
         """
         # Ensure model is initialized
         if self.model is None:
