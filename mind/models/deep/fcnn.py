@@ -26,17 +26,6 @@ class FCNNModel(nn.Module):
                  dropout_rate: float = 0.4):
         """
         Initialize a Fully Connected Neural Network model.
-
-        Parameters
-        ----------
-        input_dim : int
-            Input dimension (window_size * n_neurons)
-        hidden_dims : List[int], optional
-            Hidden layer dimensions, by default [256, 128, 64]
-        output_dim : int, optional
-            Output dimension (number of classes), by default 2
-        dropout_rate : float, optional
-            Dropout rate for regularization, by default 0.4
         """
         super(FCNNModel, self).__init__()
 
