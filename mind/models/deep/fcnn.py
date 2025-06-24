@@ -69,16 +69,6 @@ class FCNNModel(nn.Module):
     def forward(self, x):
         """
         Forward pass through the network.
-
-        Parameters
-        ----------
-        x : torch.Tensor
-            Input tensor, shape (batch_size, window_size, n_neurons)
-
-        Returns
-        -------
-        torch.Tensor
-            Output tensor, shape (batch_size, output_dim)
         """
         # Flatten input if needed
         batch_size = x.size(0)
