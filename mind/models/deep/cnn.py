@@ -197,22 +197,6 @@ class CNNWrapper:
     def fit(self, X_train, y_train, X_val=None, y_val=None):
         """
         Train the CNN model.
-
-        Parameters
-        ----------
-        X_train : torch.Tensor or np.ndarray
-            Training features
-        y_train : torch.Tensor or np.ndarray
-            Training labels
-        X_val : torch.Tensor or np.ndarray, optional
-            Validation features, by default None
-        y_val : torch.Tensor or np.ndarray, optional
-            Validation labels, by default None
-
-        Returns
-        -------
-        self
-            Trained model
         """
         logger.info("Training CNN model")
 
