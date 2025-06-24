@@ -134,31 +134,6 @@ class FCNNWrapper:
                  random_state: int = 42):
         """
         Initialize the FCNN wrapper.
-
-        Parameters
-        ----------
-        input_dim : Optional[int], optional
-            Input dimension (window_size * n_neurons), by default None
-        hidden_dims : List[int], optional
-            Hidden layer dimensions, by default [256, 128, 64]
-        output_dim : int, optional
-            Output dimension (number of classes), by default 2
-        dropout_rate : float, optional
-            Dropout rate for regularization, by default 0.4
-        learning_rate : float, optional
-            Learning rate for the optimizer, by default 0.001
-        weight_decay : float, optional
-            Weight decay for the optimizer, by default 1e-5
-        batch_size : int, optional
-            Batch size for training, by default 32
-        num_epochs : int, optional
-            Maximum number of epochs, by default 100
-        patience : int, optional
-            Patience for early stopping, by default 15
-        device : str, optional
-            Device for training ('cuda' or 'cpu'), by default 'cuda' if available
-        random_state : int, optional
-            Random seed for reproducibility, by default 42
         """
         # Set random seed for reproducibility
         torch.manual_seed(random_state)
