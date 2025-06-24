@@ -405,18 +405,6 @@ class FCNNWrapper:
     def get_feature_importance(self, window_size: int, n_neurons: int) -> np.ndarray:
         """
         Get feature importance from the model.
-
-        Parameters
-        ----------
-        window_size : int
-            Size of the sliding window
-        n_neurons : int
-            Number of neurons
-
-        Returns
-        -------
-        np.ndarray
-            Feature importance scores, shape (window_size, n_neurons)
         """
         # Ensure model is initialized
         if self.model is None:
