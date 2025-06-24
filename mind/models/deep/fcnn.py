@@ -371,16 +371,6 @@ class FCNNWrapper:
     def predict_proba(self, X):
         """
         Predict class probabilities.
-
-        Parameters
-        ----------
-        X : torch.Tensor or np.ndarray
-            Input features
-
-        Returns
-        -------
-        np.ndarray
-            Predicted class probabilities
         """
         # Ensure model is initialized
         if self.model is None:
