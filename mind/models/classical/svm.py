@@ -211,16 +211,6 @@ class SVMModel:
     def predict(self, X):
         """
         Make predictions with the trained model.
-
-        Parameters
-        ----------
-        X : torch.Tensor or np.ndarray
-            Input features
-
-        Returns
-        -------
-        np.ndarray
-            Predicted labels
         """
         # Prepare data
         X, _ = self._prepare_data(X)
