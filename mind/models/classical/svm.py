@@ -73,18 +73,6 @@ class SVMModel:
     def _prepare_data(self, X, y=None):
         """
         Prepare the data for the model.
-
-        Parameters
-        ----------
-        X : torch.Tensor or np.ndarray
-            Input features, shape (n_samples, window_size, n_neurons)
-        y : torch.Tensor or np.ndarray, optional
-            Target labels, shape (n_samples,)
-
-        Returns
-        -------
-        Tuple[np.ndarray, Optional[np.ndarray]]
-            Prepared X and y (if provided)
         """
         # Convert torch tensors to numpy arrays if needed
         if hasattr(X, 'numpy'):
