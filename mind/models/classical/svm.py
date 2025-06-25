@@ -33,27 +33,6 @@ class SVMModel:
                  use_pca: bool = True):
         """
         Initialize an SVM model.
-
-        Parameters
-        ----------
-        C : float, optional
-            Regularization parameter, by default 1.0
-        kernel : str, optional
-            Kernel type ('rbf' or 'linear'), by default 'rbf'
-        gamma : str, optional
-            Kernel coefficient, by default 'scale'
-        class_weight : Optional[str], optional
-            Weights for imbalanced classes, by default 'balanced'
-        probability : bool, optional
-            Whether to enable probability estimates, by default True
-        random_state : int, optional
-            Random seed for reproducibility, by default 42
-        n_components : Optional[float], optional
-            Number of PCA components or explained variance ratio, by default 0.95
-        optimize_hyperparams : bool, optional
-            Whether to optimize hyperparameters, by default False
-        use_pca : bool, optional
-            Whether to use PCA for dimensionality reduction, by default True
         """
         # Store hyperparameters
         self.C = C
