@@ -184,7 +184,6 @@ class SVMModel:
         # Prepare data
         X_train, y_train = self._prepare_data(X_train, y_train)
 
-        # Optimize hyperparameters if requested
         if self.optimize_hyperparams:
             self.optimize_hyperparameters(X_train, y_train)
 
@@ -193,14 +192,12 @@ class SVMModel:
 
         logger.info("SVM model training complete")
 
-        # Log PCA explained variance if applicable
         if self.use_pca:
             pca = self.model.named_steps['pca']
             explained_variance = pca.explained_variance_ratio_.sum()
             n_components = pca.n_components_
             logger.info(f"PCA: {n_components} components explain {explained_variance:.2%} of variance")
 
-        # If validation data is provided, report validation score
         if X_val is not None and y_val is not None:
             X_val, y_val = self._prepare_data(X_val, y_val)
             val_score = self.model.score(X_val, y_val)
