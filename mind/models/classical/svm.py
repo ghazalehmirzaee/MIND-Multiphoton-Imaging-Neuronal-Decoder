@@ -58,7 +58,7 @@ class SVMModel:
         # Initialize pipeline with optional PCA
         if use_pca:
             self.model = Pipeline([
-                ('scaler', StandardScaler()),  # Added scaler for better PCA performance
+                ('scaler', StandardScaler()),  
                 ('pca', PCA(n_components=n_components, random_state=random_state)),
                 ('svm', self.svm)
             ])
