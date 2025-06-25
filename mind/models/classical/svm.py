@@ -90,22 +90,6 @@ class SVMModel:
     def optimize_hyperparameters(self, X_train, y_train, cv: int = 3, n_iter: int = 15):
         """
         Optimize model hyperparameters using RandomizedSearchCV.
-
-        Parameters
-        ----------
-        X_train : np.ndarray
-            Training features
-        y_train : np.ndarray
-            Training labels
-        cv : int, optional
-            Number of cross-validation folds, by default 3
-        n_iter : int, optional
-            Number of parameter settings sampled, by default 15
-
-        Returns
-        -------
-        self
-            The model with optimized hyperparameters
         """
         logger.info("Optimizing SVM hyperparameters")
 
