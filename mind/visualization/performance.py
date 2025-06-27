@@ -222,9 +222,6 @@ def plot_performance_radar(
 ) -> plt.Figure:
     """
     Create radar plots showing performance metrics for each signal type.
-
-    Shows accuracy, precision, recall, and F1 score for all models on each
-    signal type using radar charts.
     """
     set_publication_style()
 
