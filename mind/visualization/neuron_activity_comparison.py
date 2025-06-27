@@ -448,26 +448,6 @@ def create_comparison_grid(
 ) -> plt.Figure:
     """
     Create a grid of comparison visualizations for all models and signal types.
-
-    Parameters
-    ----------
-    mat_file_path : str
-        Path to MATLAB file with calcium signals and ROI matrix
-    results : Dict[str, Dict[str, Any]]
-        Results dictionary
-    output_dir : str
-        Directory to save figure
-    model_names : List[str], optional
-        Names of models to analyze, by default ['random_forest', 'cnn']
-    top_n : int, optional
-        Number of top neurons to consider, by default 20
-    show_plot : bool, optional
-        Whether to display plot, by default False
-
-    Returns
-    -------
-    plt.Figure
-        The created figure
     """
     # Load data
     calcium_signals, roi_matrix, excluded_cells = load_data(mat_file_path)
