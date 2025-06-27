@@ -299,9 +299,6 @@ def plot_model_performance_heatmap(
 ) -> plt.Figure:
     """
     Create a heatmap showing three metrics for all model-signal combinations.
-
-    This creates a visual summary of model performance across all signal types
-    with Accuracy, F1 Score, and ROC AUC grouped together.
     """
     set_publication_style()
 
