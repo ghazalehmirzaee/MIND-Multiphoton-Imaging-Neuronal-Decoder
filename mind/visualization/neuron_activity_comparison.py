@@ -373,32 +373,6 @@ def plot_model_activity_comparison(
 ) -> plt.Figure:
     """
     Create a side-by-side comparison of model-important and most active neurons.
-
-    Parameters
-    ----------
-    calcium_signals : Dict[str, np.ndarray]
-        Dictionary containing all three signal types
-    excluded_cells : np.ndarray
-        Array of excluded cell indices
-    roi_matrix : np.ndarray
-        ROI matrix for visualization
-    model_importance : Dict[str, Tuple[np.ndarray, np.ndarray]]
-        Dictionary mapping signal type to (importance, top_indices)
-    signal_type : str
-        Type of signal to analyze ('calcium_signal', 'deltaf_signal', or 'deconv_signal')
-    model_name : str, optional
-        Name of model to analyze, by default 'random_forest'
-    top_n : int, optional
-        Number of top neurons to consider, by default 20
-    output_path : Optional[str], optional
-        Path to save the figure, by default None
-    show_plot : bool, optional
-        Whether to display the plot, by default True
-
-    Returns
-    -------
-    matplotlib.figure.Figure
-        The created figure
     """
     set_publication_style()
 
