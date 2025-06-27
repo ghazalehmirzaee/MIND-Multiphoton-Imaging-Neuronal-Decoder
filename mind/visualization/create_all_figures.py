@@ -1,6 +1,6 @@
 # mind/visualization/create_all_figures.py
 """
-Main orchestrator for creating all required visualizations with consistent styling.
+Main for creating all required visualizations.
 This module serves as the central entry point for generating all figures.
 """
 import logging
@@ -34,9 +34,6 @@ def create_all_visualizations(
 ) -> None:
     """
     Create all required visualizations with consistent styling.
-
-    This is the main function that orchestrates the creation of all figures
-    with consistent color coding and styling throughout.
 
     Required visualizations:
     1. Signal comparisons for top 5 neurons
