@@ -23,9 +23,6 @@ def plot_confusion_matrix_grid(
 ) -> plt.Figure:
     """
     Create a 5x3 grid of confusion matrices for all models and signal types.
-
-    This function creates a grid showing confusion matrices for each model-signal
-    combination, with consistent color coding by signal type.
     """
     set_publication_style()
 
