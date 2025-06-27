@@ -668,13 +668,6 @@ def analyze_neuron_activity_importance(
 ) -> Dict[str, Any]:
     """
     Analyze the relationship between neuron activity and model importance.
-
-    This function:
-    1. Calculates activity sums for all neurons
-    2. Extracts model-important neurons
-    3. Computes overlap metrics
-    4. Creates visualizations
-    5. Saves detailed metrics
     """
     # Set up publication style
     set_publication_style()
