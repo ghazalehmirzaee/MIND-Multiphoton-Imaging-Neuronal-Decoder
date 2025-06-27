@@ -86,8 +86,6 @@ def plot_roc_curve_grid(
 ) -> plt.Figure:
     """
     Create a 5x3 grid of ROC curves for all models and signal types.
-
-    Each ROC curve is colored according to its signal type for consistency.
     """
     set_publication_style()
 
