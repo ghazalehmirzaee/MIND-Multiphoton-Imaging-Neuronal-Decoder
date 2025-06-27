@@ -162,16 +162,6 @@ def create_visualization_summary(
 ) -> None:
     """
     Create a summary file listing all generated visualizations.
-
-    This creates a simple text file that lists all the generated figures
-    and their locations for easy reference.
-
-    Parameters
-    ----------
-    output_dir : Path
-        Main output directory
-    subdirs : Dict[str, Path]
-        Dictionary of subdirectories where figures are saved
     """
     summary_path = output_dir / 'visualization_summary.txt'
 
