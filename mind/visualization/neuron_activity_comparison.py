@@ -675,24 +675,6 @@ def analyze_neuron_activity_importance(
     3. Computes overlap metrics
     4. Creates visualizations
     5. Saves detailed metrics
-
-    Parameters
-    ----------
-    mat_file_path : str
-        Path to MATLAB file with calcium signals and ROI matrix
-    results : Dict[str, Dict[str, Any]]
-        Results dictionary from model training
-    output_dir : str
-        Directory to save output files
-    model_names : List[str], optional
-        Names of models to analyze, by default ['random_forest', 'cnn']
-    top_n : int, optional
-        Number of top neurons to consider, by default 20
-
-    Returns
-    -------
-    Dict[str, Any]
-        Analysis results including metrics and file paths
     """
     # Set up publication style
     set_publication_style()
