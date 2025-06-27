@@ -50,15 +50,6 @@ def create_all_visualizations(
     - Calcium: Blue (#356d9e)
     - ΔF/F: Green (#4c8b64)
     - Deconvolved: Red (#a85858)
-
-    Parameters
-    ----------
-    results : Dict[str, Dict[str, Any]]
-        Results dictionary organized by model and signal type
-    calcium_signals : Dict[str, np.ndarray]
-        Dictionary containing the three signal types
-    output_dir : Path
-        Directory where all visualizations will be saved
     """
     # Ensure output directory exists
     output_dir = Path(output_dir)
