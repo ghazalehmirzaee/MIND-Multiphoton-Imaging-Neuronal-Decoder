@@ -152,8 +152,6 @@ def plot_precision_recall_grid(
 ) -> plt.Figure:
     """
     Create a 5x3 grid of precision-recall curves for all models and signal types.
-
-    Each curve is colored according to its signal type for consistency.
     """
     set_publication_style()
 
