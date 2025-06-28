@@ -24,7 +24,7 @@ class CNNModel(nn.Module):
                  output_dim: int = 2,
                  dropout_rate: float = 0.5):
         """
-        Initialize optimized CNN model.
+        Initialize the optimized CNN model.
         """
         super(CNNModel, self).__init__()
 
@@ -101,7 +101,7 @@ class CNNModel(nn.Module):
         This method analyzes the trained weights to determine which neurons and
         time points are most important for classification.
         """
-        # Use instance values if not provided
+        # Use instance values 
         if window_size is None:
             window_size = self.window_size
         if n_neurons is None:
