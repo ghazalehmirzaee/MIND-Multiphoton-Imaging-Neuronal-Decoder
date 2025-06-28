@@ -2,6 +2,7 @@
 """
 Single model and signal type experiment runner with simplified structure.
 """
+
 import argparse
 import logging
 import json
@@ -25,7 +26,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
 def set_seed(seed: int = 42):
     """Set random seed for reproducibility."""
     random.seed(seed)
@@ -38,7 +38,6 @@ def set_seed(seed: int = 42):
     torch.backends.cudnn.benchmark = False
     os.environ['PYTHONHASHSEED'] = str(seed)
     logger.info(f"Random seed set to {seed}")
-
 
 def run_experiment(model_type, signal_type, config):
     """Run experiment for a single model and signal type."""
@@ -101,7 +100,6 @@ def run_experiment(model_type, signal_type, config):
     except Exception as e:
         logger.error(f"Error training model: {e}")
         return None
-
 
 def main():
     """Main function to run experiments."""
