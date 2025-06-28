@@ -117,7 +117,7 @@ class SVMModel:
             param_distributions=param_grid,
             n_iter=n_iter,
             cv=cv,
-            scoring='balanced_accuracy',  # Better for imbalanced data
+            scoring='balanced_accuracy',  
             verbose=1,
             random_state=self.random_state,
             n_jobs=-1
