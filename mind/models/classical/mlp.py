@@ -105,13 +105,13 @@ class MLPModel:
             'hidden_layer_sizes': [
                 (64,), (128,),
                 (64, 32), (128, 64),
-                (64, 128, 32), (128, 256, 64)  # Removed very deep architectures
+                (64, 128, 32), (128, 256, 64) 
             ],
-            'activation': ['relu', 'tanh'],  # Removed 'logistic' - rarely optimal
-            'alpha': [0.0001, 0.001, 0.01],  # Focused range
+            'activation': ['relu', 'tanh'], 
+            'alpha': [0.0001, 0.001, 0.01],  
             'learning_rate_init': [0.001, 0.005, 0.01],
-            'batch_size': ['auto', 32, 64],  # Removed 128 - often too large
-            'solver': ['adam']  # Removed 'sgd' - adam is generally better
+            'batch_size': ['auto', 32, 64],  
+            'solver': ['adam'] 
         }
 
         # Initialize RandomizedSearchCV
