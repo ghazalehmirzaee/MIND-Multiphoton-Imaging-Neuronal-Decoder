@@ -65,7 +65,7 @@ class SVMModel:
             logger.info(f"Initialized SVM model with PCA (n_components={n_components})")
         else:
             self.model = Pipeline([
-                ('scaler', StandardScaler()),  # Always scale for SVM
+                ('scaler', StandardScaler()),  
                 ('svm', self.svm)
             ])
             logger.info("Initialized SVM model without PCA")
@@ -99,10 +99,10 @@ class SVMModel:
         # Define parameter grid - simplified for calcium imaging data
         if self.use_pca:
             param_grid = {
-                'pca__n_components': [0.85, 0.9, 0.95, 0.99],  # Focused range
+                'pca__n_components': [0.85, 0.9, 0.95, 0.99], 
                 'svm__C': [0.1, 1, 10, 100],
                 'svm__gamma': ['scale', 'auto', 0.001, 0.01],
-                'svm__kernel': ['rbf', 'linear']  # Removed 'poly' - rarely needed
+                'svm__kernel': ['rbf', 'linear'] 
             }
         else:
             param_grid = {
