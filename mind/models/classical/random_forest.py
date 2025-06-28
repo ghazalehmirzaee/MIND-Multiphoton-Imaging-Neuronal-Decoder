@@ -1,5 +1,5 @@
 """
-Optimized Random Forest model implementation for calcium imaging data.
+Random Forest model implementation for calcium imaging data.
 """
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
