@@ -120,7 +120,7 @@ class MLPModel:
             param_distributions=param_grid,
             n_iter=n_iter,
             cv=cv,
-            scoring='balanced_accuracy',  # Better for imbalanced data
+            scoring='balanced_accuracy',  
             verbose=1,
             random_state=self.random_state,
             n_jobs=-1
@@ -180,10 +180,8 @@ class MLPModel:
         # If validation data is provided and early stopping is enabled
         if X_val is not None and y_val is not None and self.early_stopping:
             X_val, y_val = self._prepare_data(X_val, y_val)
-            X_val = self.scaler.transform(X_val)  # Use transform, not fit_transform
+            X_val = self.scaler.transform(X_val)  
 
-            # SKLearn's MLPClassifier handles validation internally
-            # We'll just use the built-in early stopping
             self.model.fit(X_train, y_train)
 
             # Report validation score
