@@ -51,7 +51,6 @@ class FCNNModel(nn.Module):
             layers.append(nn.ReLU())
 
             # Add dropout for regularization
-            # Use smaller dropout rate for the last hidden layer
             current_dropout = dropout_rate if i < len(hidden_dims) - 1 else dropout_rate * 0.75
             layers.append(nn.Dropout(current_dropout))
 
