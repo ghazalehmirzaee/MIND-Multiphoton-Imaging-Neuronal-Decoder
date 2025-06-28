@@ -27,10 +27,10 @@ class MLPModel:
                  batch_size: str = 'auto',
                  learning_rate: str = 'adaptive',
                  learning_rate_init: float = 0.001,
-                 max_iter: int = 300,  # Increased from 200 for better convergence
+                 max_iter: int = 300,  
                  early_stopping: bool = True,
                  validation_fraction: float = 0.1,
-                 n_iter_no_change: int = 15,  # Increased from 10
+                 n_iter_no_change: int = 15, 
                  random_state: int = 42,
                  optimize_hyperparams: bool = False):
         """
