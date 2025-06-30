@@ -183,7 +183,7 @@ def get_dataset_dimensions(datasets: Dict[str, Dict[str, torch.utils.data.Datase
         if isinstance(X, torch.Tensor):
             dimensions[signal_name] = (X.shape[0], X.shape[1])
         else:
-            # Handle case where X is not a tensor (e.g., for classical models)
+            # Handle case where X is not a tensor
             dimensions[signal_name] = (X.shape[0], X.shape[1])
 
     return dimensions
