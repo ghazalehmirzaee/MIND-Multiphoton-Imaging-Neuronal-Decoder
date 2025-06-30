@@ -1,5 +1,5 @@
 """
-Fixed configuration with proper Random Forest class balancing and scientific colors.
+Fixed configuration.
 """
 import torch
 
