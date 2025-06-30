@@ -68,7 +68,7 @@ DEFAULT_CONFIG = {
         },
         "cnn": {
             "n_filters": [32, 64, 128],  
-            "kernel_size": 5,  # Larger kernel for temporal patterns
+            "kernel_size": 5,  
             "output_dim": 2,
             "dropout_rate": 0.2,  # Reduced dropout
             "learning_rate": 0.0005,  
