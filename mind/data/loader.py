@@ -1,5 +1,5 @@
 """
-Data loader for calcium imaging data with proper binary classification.
+Data loader for calcium imaging data.
 """
 import os
 import numpy as np
