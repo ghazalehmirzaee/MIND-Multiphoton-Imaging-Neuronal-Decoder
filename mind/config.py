@@ -71,7 +71,7 @@ DEFAULT_CONFIG = {
             "kernel_size": 5,  # Larger kernel for temporal patterns
             "output_dim": 2,
             "dropout_rate": 0.2,  # Reduced dropout
-            "learning_rate": 0.0005,  # Lower learning rate
+            "learning_rate": 0.0005,  
             "weight_decay": 1e-4,
             "batch_size": 32,
             "num_epochs": 50,
