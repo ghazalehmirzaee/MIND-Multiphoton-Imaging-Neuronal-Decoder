@@ -70,7 +70,7 @@ DEFAULT_CONFIG = {
             "n_filters": [32, 64, 128],  
             "kernel_size": 5,  
             "output_dim": 2,
-            "dropout_rate": 0.2,  # Reduced dropout
+            "dropout_rate": 0.2,  
             "learning_rate": 0.0005,  
             "weight_decay": 1e-4,
             "batch_size": 32,
