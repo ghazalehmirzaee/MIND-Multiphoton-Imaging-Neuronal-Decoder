@@ -67,7 +67,7 @@ DEFAULT_CONFIG = {
             "random_state": 42
         },
         "cnn": {
-            "n_filters": [32, 64, 128],  # Reduced for better performance
+            "n_filters": [32, 64, 128],  
             "kernel_size": 5,  # Larger kernel for temporal patterns
             "output_dim": 2,
             "dropout_rate": 0.2,  # Reduced dropout
