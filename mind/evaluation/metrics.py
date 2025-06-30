@@ -38,7 +38,7 @@ def evaluate_model(model, X_test, y_test):
     # Get predictions
     y_pred = model.predict(X_test)
 
-    # Get probabilities if available
+    # Get probabilities 
     try:
         y_prob = model.predict_proba(X_test)
     except:
@@ -50,7 +50,7 @@ def evaluate_model(model, X_test, y_test):
     # Get confusion matrix
     cm = confusion_matrix(y_test, y_pred)
 
-    # Get ROC curve data if available
+    # Get ROC curve data
     curve_data = {}
     if y_prob is not None:
         fpr, tpr, _ = roc_curve(y_test, y_prob[:, 1])
