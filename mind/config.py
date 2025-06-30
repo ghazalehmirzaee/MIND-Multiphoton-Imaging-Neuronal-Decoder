@@ -25,7 +25,7 @@ DEFAULT_CONFIG = {
             "min_samples_split": 5,
             "min_samples_leaf": 2,
             "max_features": "sqrt",
-            "class_weight": "balanced_subsample",  # Better for imbalanced data
+            "class_weight": "balanced_subsample",  
             "n_jobs": -1,
             "random_state": 42,
             "criterion": "gini",
