@@ -1,5 +1,5 @@
 """
-Performance metrics with emphasis on deconvolved signal superiority.
+Performance metrics.
 """
 import numpy as np
 from sklearn.metrics import (accuracy_score, precision_score, recall_score,
