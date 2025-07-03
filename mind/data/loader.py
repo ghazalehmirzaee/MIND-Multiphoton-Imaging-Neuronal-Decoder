@@ -86,7 +86,7 @@ def load_behavioral_data(xlsx_file_path: str) -> pd.DataFrame:
 def match_behavior_to_frames(behavior_data: pd.DataFrame, num_frames: int,
                              binary_classification: bool = True) -> np.ndarray:
     """
-    Create frame-by-frame behavior labels from behavioral events.
+    Create frame-by-frame behavior labels from behavioral footsteps.
     """
     logger.info(f"Creating frame-by-frame behavior labels for {num_frames} frames")
     logger.info(f"Binary classification mode: {binary_classification}")
