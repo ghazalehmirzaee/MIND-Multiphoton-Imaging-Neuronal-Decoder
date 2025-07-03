@@ -33,16 +33,6 @@ logger = logging.getLogger(__name__)
 def load_results(results_dir: Union[str, Path]) -> Dict[str, Dict[str, Any]]:
     """
     Load experiment results from JSON files.
-
-    Parameters
-    ----------
-    results_dir : Union[str, Path]
-        Directory containing result JSON files
-
-    Returns
-    -------
-    Dict[str, Dict[str, Any]]
-        Dictionary of results organized by model name and signal type
     """
     logger.info(f"Loading results from {results_dir}")
 
