@@ -188,7 +188,7 @@ def find_most_active_neurons(calcium_signals: Dict[str, np.ndarray],
     if signal_type == 'deconv_signal':
         activity_metric = np.sum(signal > 0, axis=0)  # Count of active frames
     else:
-        activity_metric = np.var(signal, axis=0)  # Variance
+        activity_metric = np.var(signal, axis=0) 
 
     # Get indices of top neurons
     top_indices = np.argsort(activity_metric)[::-1][:n_neurons]
