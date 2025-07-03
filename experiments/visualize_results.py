@@ -76,16 +76,6 @@ def load_results(results_dir: Union[str, Path]) -> Dict[str, Dict[str, Any]]:
 def create_performance_dataframe(results: Dict[str, Dict[str, Any]]) -> pd.DataFrame:
     """
     Create a DataFrame of performance metrics from results.
-
-    Parameters
-    ----------
-    results : Dict[str, Dict[str, Any]]
-        Dictionary of results
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame of performance metrics
     """
     data = []
 
