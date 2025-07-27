@@ -51,7 +51,6 @@ class MLPModel:
         self.random_state = random_state
         self.optimize_hyperparams = optimize_hyperparams
 
-        # Initialize the model
         self.model = MLPClassifier(
             hidden_layer_sizes=hidden_layer_sizes,
             activation=activation,
