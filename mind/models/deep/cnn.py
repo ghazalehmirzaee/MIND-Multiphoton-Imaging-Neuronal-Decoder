@@ -32,7 +32,7 @@ class CNNModel(nn.Module):
         self.n_neurons = n_neurons
         padding = kernel_size // 2
 
-        # Standard convolutional layers with batch normalization
+        # convolutional layers with batch normalization
         self.conv1 = nn.Conv1d(n_neurons, n_filters[0], kernel_size, padding=padding)
         self.bn1 = nn.BatchNorm1d(n_filters[0])
 
