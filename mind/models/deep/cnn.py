@@ -126,7 +126,7 @@ class CNNModel(nn.Module):
 
 class CNNWrapper:
     """
-    Wrapper for the CNN model providing a sklearn-like interface.
+    Wrapper for the CNN model.
 
     This wrapper handles data preparation, training, evaluation, and
     feature importance extraction for the CNN model.
