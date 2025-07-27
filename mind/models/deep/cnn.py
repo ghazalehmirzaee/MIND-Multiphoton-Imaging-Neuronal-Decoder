@@ -1,5 +1,5 @@
 """
-Optimized CNN model for calcium imaging data.
+CNN model for calcium imaging data.
 """
 import torch
 import torch.nn as nn
