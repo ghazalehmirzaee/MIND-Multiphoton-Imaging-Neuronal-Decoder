@@ -65,7 +65,7 @@ class MLPModel:
             validation_fraction=validation_fraction,
             n_iter_no_change=n_iter_no_change,
             random_state=random_state,
-            verbose=False  # Set to True for debugging
+            verbose=False  
         )
 
         # Initialize scaler for data normalization
