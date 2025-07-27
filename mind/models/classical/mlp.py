@@ -34,7 +34,7 @@ class MLPModel:
                  random_state: int = 42,
                  optimize_hyperparams: bool = False):
         """
-        Initialize an MLP model.
+        Initialize the MLP model.
         """
         # Store hyperparameters
         self.hidden_layer_sizes = hidden_layer_sizes
