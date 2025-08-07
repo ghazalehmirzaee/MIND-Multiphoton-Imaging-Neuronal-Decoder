@@ -1,5 +1,5 @@
 """
-Feature importance analysis for neural decoding models.
+Feature importance analysis for neuronal decoding models.
 """
 import numpy as np
 from typing import Dict, List, Optional, Tuple, Union, Any
