@@ -49,7 +49,7 @@ def extract_feature_importance(model, window_size: int, n_neurons: int) -> np.nd
             logger.warning("Model does not provide feature importance. Returning zeros.")
             importance = np.zeros((window_size, n_neurons))
 
-        # Normalize if not already normalized
+        # Normalize 
         if importance.sum() > 0:
             importance = importance / importance.sum()
 
