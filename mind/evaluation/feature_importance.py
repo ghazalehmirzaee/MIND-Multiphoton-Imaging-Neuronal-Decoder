@@ -93,7 +93,6 @@ def analyze_neuron_importance(importance_matrix: np.ndarray, top_n: int = 20) ->
 
     return neuron_importance, top_indices
 
-
 def find_important_time_windows(importance_matrix: np.ndarray, percentile: float = 90) -> List[Tuple[int, int]]:
     """
     Find time windows with high feature importance.
@@ -127,7 +126,7 @@ def find_important_time_windows(importance_matrix: np.ndarray, percentile: float
 
 def create_importance_summary(importance_matrix: np.ndarray, window_size: int, n_neurons: int) -> Dict[str, Any]:
     """
-    Create a comprehensive summary of feature importance.
+    Create a summary of feature importance.
     """
     # Analyze temporal importance
     temporal_importance = analyze_temporal_importance(importance_matrix)
