@@ -7,7 +7,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
 def extract_feature_importance(model, window_size: int, n_neurons: int) -> np.ndarray:
     """
     Extract feature importance from a trained model.
