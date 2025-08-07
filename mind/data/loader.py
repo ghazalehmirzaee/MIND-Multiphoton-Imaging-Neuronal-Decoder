@@ -186,7 +186,7 @@ def find_most_active_neurons(calcium_signals: Dict[str, np.ndarray],
     # For deconvolved signals, use sum of transients
     # For other signals, use variance
     if signal_type == 'deconv_signal':
-        activity_metric = np.sum(signal > 0, axis=0)  # Count of active frames
+        activity_metric = np.sum(signal > 0, axis=0) 
     else:
         activity_metric = np.var(signal, axis=0) 
 
