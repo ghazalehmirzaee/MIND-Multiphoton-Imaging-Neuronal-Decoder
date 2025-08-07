@@ -10,7 +10,6 @@ from typing import Dict, Any, Optional, Tuple, List, Union
 
 logger = logging.getLogger(__name__)
 
-
 class MLPModel:
     """
     Multilayer Perceptron model for decoding behavior from calcium imaging signals.
@@ -76,7 +75,7 @@ class MLPModel:
         """
         Prepare the data for the model.
         """
-        # Convert torch tensors to numpy arrays if needed
+        # Convert torch tensors to numpy arrays 
         if hasattr(X, 'numpy'):
             X = X.numpy()
         if y is not None and hasattr(y, 'numpy'):
@@ -224,8 +223,6 @@ class MLPModel:
     def get_feature_importance(self, window_size: int, n_neurons: int) -> np.ndarray:
         """
         Estimate feature importance using weight magnitudes.
-
-        This is a rough approximation based on the magnitude of weights in the first layer.
         """
         # Make sure the model is trained
         if not hasattr(self.model, 'coefs_'):
