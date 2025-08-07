@@ -194,7 +194,6 @@ def main():
                 binary_classification=True
             )
 
-            # Create visualizations
             viz_dir = output_dir / "visualizations"
             create_all_visualizations(
                 results=json_results,
