@@ -1,6 +1,6 @@
 # experiments/run_experiment.py
 """
-Single model and signal type experiment runner with simplified structure.
+Single model and signal type experiment runner.
 """
 
 import argparse
