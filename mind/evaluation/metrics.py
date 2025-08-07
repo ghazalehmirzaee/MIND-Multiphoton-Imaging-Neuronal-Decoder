@@ -8,10 +8,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
 def calculate_metrics(y_true, y_pred, y_prob=None):
     """Calculate comprehensive classification metrics."""
-    # Convert tensors to numpy if needed
+    # Convert tensors to numpy
     if hasattr(y_true, 'cpu'):
         y_true = y_true.cpu().numpy()
     if hasattr(y_pred, 'cpu'):
@@ -31,7 +30,6 @@ def calculate_metrics(y_true, y_pred, y_prob=None):
         metrics['roc_auc'] = float(roc_auc_score(y_true, y_prob[:, 1]))
 
     return metrics
-
 
 def evaluate_model(model, X_test, y_test):
     """Evaluate model and return comprehensive results."""
