@@ -20,7 +20,7 @@ def load_calcium_signals(mat_file_path: str) -> Dict[str, np.ndarray]:
     logger.info(f"Loading calcium signals from {mat_file_path}")
 
     try:
-        # First try using scipy.io.loadmat (for older MATLAB files)
+        # First try using scipy.io.loadmat 
         try:
             data = scipy.io.loadmat(mat_file_path)
             calcium_signal = data.get('calciumsignal_wanted', None)
