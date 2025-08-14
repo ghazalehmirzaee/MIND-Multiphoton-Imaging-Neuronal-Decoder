@@ -1,18 +1,18 @@
-# MIND: Multiphoton Imaging Neural Decoder
+# MIND: Multiphoton Imaging Neuronal Decoder
 
 ![Python](https://img.shields.io/badge/Python-3.7+-blue.svg)
 ![PyTorch](https://img.shields.io/badge/PyTorch-1.8+-orange.svg)
 
 ## Overview
 
-MIND (Multiphoton Imaging Neural Decoder) is a framework for decoding behavior from calcium imaging data using various machine learning and deep learning approaches. The framework allows comprehensive comparison between different signal types (raw calcium signals, ΔF/F, and deconvolved signals) and model architectures.
+MIND (Multiphoton Imaging Neuronal Decoder) is a framework for decoding behavior from calcium imaging data using various machine learning and deep learning approaches. The framework allows comprehensive comparison between different signal types (raw calcium signals, ΔF/F, and deconvolved signals) and model architectures.
 
 ## Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/MIND-Multiphoton-Imaging-Neural-Decoder.git
-cd MIND-Multiphoton-Imaging-Neural-Decoder
+git clone https://github.com/ghazalehmirzaee/MIND-Multiphoton-Imaging-Neuronal-Decoder.git
+cd MIND-Multiphoton-Imaging-Neuronal-Decoder
 
 # Create and activate a virtual environment (recommended)
 python -m venv env
@@ -25,7 +25,7 @@ pip install -e
 ## Project Structure
 
 ```bash
-MIND-Multiphoton-Imaging-Neural-Decoder/
+MIND-Multiphoton-Imaging-Neuronal-Decoder/
 ├── data/                     # Data storage directory
 │   └── raw/                  # Raw MATLAB and behavioral Excel data files
 ├── experiments/              # Experiment runner scripts
