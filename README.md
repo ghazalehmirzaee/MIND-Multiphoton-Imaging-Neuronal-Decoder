@@ -51,8 +51,8 @@ MIND-Multiphoton-Imaging-Neuronal-Decoder/
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/MIND-Multiphoton-Imaging-Neural-Decoder.git
-cd MIND-Multiphoton-Imaging-Neural-Decoder
+git clone https://github.com/ghazalehmirzaee/MIND-Multiphoton-Imaging-Neuronal-Decoder.git
+cd MIND-Multiphoton-Imaging-Neuronal-Decoder
 
 # Create and activate a conda environment
 conda create -n mind python=3.9
