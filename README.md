@@ -68,10 +68,10 @@ pip install -e
 
 ```bash
 # Run with default configuration
-python experiments/compare_models.py
+python experiments/run_experiment.py --dataset all --visualize --export-excel --fixed-axes
 
 # Run with custom configuration
-python experiments/compare_models.py data.neural_path=path/to/your/data.mat data.behavior_path=path/to/your/data.xlsx
+python experiments/run_experiment.py --dataset all --visualize --export-excel --fixed-axes
 ```
 
 ## Visualizing Results
