@@ -7,20 +7,6 @@
 
 MIND (Multiphoton Imaging Neuronal Decoder) is a framework for decoding behavior from calcium imaging data using various machine learning and deep learning approaches. The framework allows comprehensive comparison between different signal types (raw calcium signals, ΔF/F, and deconvolved signals) and model architectures.
 
-## Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/ghazalehmirzaee/MIND-Multiphoton-Imaging-Neuronal-Decoder.git
-cd MIND-Multiphoton-Imaging-Neuronal-Decoder
-
-# Create and activate a virtual environment (recommended)
-python -m venv env
-source env/bin/activate  # On Windows: env\Scripts\activate
-
-# Install the package and dependencies
-pip install -e
-```
 
 ## Project Structure
 
