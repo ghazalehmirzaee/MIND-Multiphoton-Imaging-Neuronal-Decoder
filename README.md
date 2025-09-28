@@ -64,6 +64,8 @@ python experiments/run_experiment.py --dataset all --visualize --export-excel --
 The dataset we used in our research comprises behavioral tracking and simultaneous neuronal recordings via two-photon calcium imaging, collected during mouse reaching tasks. Specifically, the dataset includes:
 
 Behavioral data (footstep events) from Excel files
+2P calcium imaging experiments data:
+
 MATLAB files containing:
 
 - Raw calcium signals (2999 time points × 764 neurons)
