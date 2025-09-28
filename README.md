@@ -40,7 +40,7 @@ MIND-Multiphoton-Imaging-Neuronal-Decoder/
 git clone https://github.com/ghazalehmirzaee/MIND-Multiphoton-Imaging-Neuronal-Decoder.git
 cd MIND-Multiphoton-Imaging-Neuronal-Decoder
 
-# Create and activate a conda environment
+# Create and activate conda environment
 conda create -n mind python=3.9
 conda activate mind
 
@@ -58,11 +58,6 @@ python experiments/run_experiment.py --dataset all --visualize --export-excel --
 
 # Run with custom configuration
 python experiments/run_experiment.py --dataset all --visualize --export-excel --fixed-axes
-```
-
-## Visualizing Results
-```bash
-python experiments/visualize_results.py
 ```
 
 ## Data
