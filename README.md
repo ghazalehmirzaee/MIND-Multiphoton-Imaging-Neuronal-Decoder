@@ -54,10 +54,18 @@ pip install -e
 
 ```bash
 # Run with default configuration
-python experiments/run_experiment.py --dataset all --visualize --export-excel --fixed-axes
+python experiments/run_experiment.py \
+  --data path/to/your/calcium_data.mat \
+  --behavior path/to/your/behavior_data.xlsx \
+  --output custom_results \
+  --model all \
+  --signal all
 
 # Run with custom configuration
-python experiments/run_experiment.py --dataset all --visualize --export-excel --fixed-axes
+python experiments/run_experiment.py --model all --signal all --visualize
+or
+python experiments/run_experiment.py --model random_forest --signal all --optimize
+
 ```
 
 ## Data
