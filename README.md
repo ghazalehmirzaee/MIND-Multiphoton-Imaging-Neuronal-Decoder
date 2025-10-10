@@ -25,7 +25,6 @@ MIND-Multiphoton-Imaging-Neuronal-Decoder/
 │   ├── training/             # Training utilities
 │   ├── utils/                # Helper functions
 │   └── visualization/        # Plotting and visualization
-├── notebooks/                # Analysis notebooks
 ├── results/                  # Output directory for results
 │   ├── models/               # Saved models
 │   └── visualizations/       # Generated figures
