@@ -29,7 +29,6 @@ MIND-Multiphoton-Imaging-Neuronal-Decoder/
 ├── results/                  # Output directory for results
 │   ├── models/               # Saved models
 │   └── visualizations/       # Generated figures
-└── tests/                    # Unit and integration tests
 
 ```
 
@@ -80,21 +79,4 @@ MATLAB files containing:
 - Deconvolved signals (2999 × 581 neurons)
 - ∆F/F signals (2999 × 581 neurons)
 
-```bash
-mind/
-  ├── config/            # Hydra configurations
-  ├── data/              # Data loading and processing
-  ├── models/            # Model implementations
-  │   ├── classical/     # Random Forest, SVM, MLP
-  │   └── deep/          # FCNN, CNN
-  ├── training/          # Training pipelines
-  ├── evaluation/        # Metrics and analysis
-  ├── visualization/     # Visualization utilities
-  └── utils/             # Helper functions
-experiments/            # Main experiment scripts
-tests/                  # Unit tests
-requirements.txt        # Dependencies
-setup.py                # Package setup
-README.md              # Project documentation
-```
 
